@@ -2,35 +2,26 @@
    História Digital - ANT & JP — MOTOR DA NARRATIVA
    =========================================================
 
-   O texto vem exclusivamente de:
+   CONFIGURAÇÃO EM JSON
 
-       texto/teresa.txt
+   texto/config/historias.json
+   texto/config/default.json
 
-   Formato:
+   O JSON controla:
+   - histórias
+   - capítulos
+   - títulos
+   - capas
+   - numeração
+   - arquivos TXT
 
-       [imagem=cena01.jpg]
-       [transicao=blur]
-
-       Primeiro parágrafo...
-
-       [imagem=cena02.jpg]
-       [transicao=blur]
-
-       Segundo parágrafo...
-
-   Cada bloco separado por uma linha vazia vira uma cena.
-
-   Comandos disponíveis:
-
-       [imagem=nome.jpg]
-       [transicao=blur]
-       [transicao=fade]
-       [transicao=instant]
-
-       [titulo=Texto]
-       [subtitulo=Texto]
-
-       [comentario=Texto]
+   Os arquivos TXT continuam controlando:
+   - narrativa
+   - imagens
+   - transições
+   - títulos/subtítulos
+   - personagens
+   - áudio
 
    ========================================================= */
 
@@ -44,46 +35,57 @@
 const CONFIG = {
 
   /*
-    Arquivo que contém toda a história.
+    Estes dois arquivos substituem:
+
+      historias.ini
+      default.ini
   */
-  textFile: "texto/teresa.txt",
+
+  catalogFile:
+    "texto/config/historias.json",
+
+  defaultsFile:
+    "texto/config/default.json",
+
 
   /*
-    Arquivo com as configurações padrão
-    por personagem (imagem/transição/áudio
-    usados quando o bloco não especifica).
+    Arquivo atualmente aberto.
+
+    Ele é alterado dinamicamente quando
+    um capítulo é aberto.
   */
-  defaultsFile: "texto/config/default.ini",
+
+  textFile:
+    "texto/teresa.txt",
+
 
   /*
-    Catálogo com a lista de histórias
-    disponíveis (uma seção por história).
-  */
-  catalogFile: "texto/config/historias.ini",
-
-  /*
-    Onde começa a região de transição.
+    Posição onde começa a transição.
 
     0.78 = 78% da altura da tela.
   */
-  transitionStart: 0.78,
+
+  transitionStart:
+    0.78,
+
 
   /*
-    Onde termina a transição.
+    Posição onde termina a transição.
 
-    0.38 = 38% da altura da tela.
+    0 = topo da tela.
   */
-  transitionEnd: 0.0,
+
+  transitionEnd:
+    0.0,
+
 
   /*
     Blur máximo durante a transição.
   */
-  maxBlur: 50,
 
-  /*
-    Opacidade máxima da faixa de blur no topo.
-  */
-  // maxTransitionBlurOpacity: 0.50
+  maxBlur:
+    50
+
 };
 
 
@@ -100,8 +102,6 @@ let backgroundStage = null;
 let backgroundLayerA = null;
 let backgroundLayerB = null;
 
-let transitionBlur = null;
-
 let layers = [];
 
 let activeLayerIndex = 0;
@@ -110,15 +110,16 @@ let scrollQueued = false;
 
 let audioPlayer = null;
 
-let audioUnlocked = false;
+/*
+  Estado global do áudio.
+
+  true  = 🔊 ligado
+  false = 🔇 desligado
+*/
+let audioEnabled = false;
+  //localStorage.getItem("audioEnabled") !== "false";
 
 let catalog = [];
-
-/*
-  História selecionada no momento (objeto do
-  catálogo, com sua lista de capítulos) e o
-  capítulo especificamente aberto no leitor.
-*/
 
 let currentHistoria = null;
 
@@ -126,23 +127,55 @@ let currentCapitulo = null;
 
 let visibilityObserver = null;
 
-const audioToggle = document.getElementById("audio-toggle");
 
-const btnVoltar = document.getElementById("btn-voltar");
+/* =========================================================
+   ELEMENTOS DA INTERFACE
+   ========================================================= */
 
-const menuHistorias = document.getElementById("menu-historias");
+const audioToggle =
+  document.getElementById(
+    "audio-toggle"
+  );
 
-const listaHistorias = document.getElementById("lista-historias");
+const btnVoltar =
+  document.getElementById(
+    "btn-voltar"
+  );
 
-const menuCapitulos = document.getElementById("menu-capitulos");
+const menuHistorias =
+  document.getElementById(
+    "menu-historias"
+  );
 
-const listaCapitulos = document.getElementById("lista-capitulos");
+const listaHistorias =
+  document.getElementById(
+    "lista-historias"
+  );
 
-const tituloHistoriaAtual = document.getElementById("titulo-historia-atual");
+const menuCapitulos =
+  document.getElementById(
+    "menu-capitulos"
+  );
 
-const btnVoltarCapitulos = document.getElementById("btn-voltar-capitulos");
+const listaCapitulos =
+  document.getElementById(
+    "lista-capitulos"
+  );
 
-const storyContainer = document.getElementById("story");
+const tituloHistoriaAtual =
+  document.getElementById(
+    "titulo-historia-atual"
+  );
+
+const btnVoltarCapitulos =
+  document.getElementById(
+    "btn-voltar-capitulos"
+  );
+
+const storyContainer =
+  document.getElementById(
+    "story"
+  );
 
 
 /* =========================================================
@@ -188,19 +221,17 @@ function renderMenu(entries) {
 
   listaHistorias.innerHTML = "";
 
-
   if (!entries.length) {
 
     listaHistorias.className =
       "status";
 
     listaHistorias.textContent =
-      "Nenhuma história encontrada em texto/config/historias.ini.";
+      "Nenhuma história encontrada em texto/config/historias.json.";
 
     return;
 
   }
-
 
   listaHistorias.className =
     "historias-grid";
@@ -213,8 +244,8 @@ function renderMenu(entries) {
         "button"
       );
 
-
-    card.type = "button";
+    card.type =
+      "button";
 
     card.className =
       "historia-card";
@@ -293,11 +324,13 @@ function renderMenu(entries) {
 function abrirHistoria(historia) {
 
   /*
-    Só um capítulo: abre o leitor direto,
-    sem passar pela tela de capítulos.
+    História com somente um capítulo:
+    abre diretamente.
   */
 
-  if (historia.capitulos.length === 1) {
+  if (
+    historia.capitulos.length === 1
+  ) {
 
     openChapter(
       historia,
@@ -309,7 +342,8 @@ function abrirHistoria(historia) {
   }
 
 
-  currentHistoria = historia;
+  currentHistoria =
+    historia;
 
 
   menuHistorias.classList.add(
@@ -321,52 +355,96 @@ function abrirHistoria(historia) {
   );
 
 
-  renderCapitulos(historia);
+  renderCapitulos(
+    historia
+  );
 
 }
 
+
+/* =========================================================
+   RENDERIZAR CAPÍTULOS
+   ========================================================= */
 
 function renderCapitulos(historia) {
 
   tituloHistoriaAtual.textContent =
     historia.titulo;
 
-  listaCapitulos.innerHTML = "";
+  listaCapitulos.innerHTML =
+    "";
 
 
   /*
-    Contador usado pelos capítulos que não
-    têm [numero] manual — começa em
-    historia.inicio (default 1) e avança a
-    cada capítulo, pulando pra frente sempre
-    que encontra um [numero] manual numérico.
+    Numeração automática.
+
+    Exemplo:
+
+      inicio = 0
+
+      capítulo sem número → 0
+      capítulo sem número → 1
+      [numero=5]            → 5
+      próximo sem número    → 6
   */
 
   let contador =
-    historia.inicio;
+    Number.isFinite(
+      Number(historia.inicio)
+    )
+      ? Number(historia.inicio)
+      : 1;
 
 
   historia.capitulos.forEach(
-    (capitulo) => {
+    capitulo => {
 
       let numeroExibido;
 
-      if (capitulo.numero !== null) {
+
+      /*
+        Número manual.
+      */
+
+      if (
+        capitulo.numero !== null &&
+        capitulo.numero !== undefined &&
+        capitulo.numero !== ""
+      ) {
 
         numeroExibido =
           capitulo.numero;
+          
+        if (numeroExibido !== -1) {
 
-        const comoNumero =
-          parseFloat(capitulo.numero);
-
-        if (!Number.isNaN(comoNumero)) {
-
-          contador =
-            Math.floor(comoNumero) + 1;
-
+          const comoNumero =
+            parseFloat(
+              capitulo.numero
+            );
+    
+    
+          if (
+            !Number.isNaN(
+              comoNumero
+            )
+          ) {
+    
+            contador =
+              Math.floor(
+                comoNumero
+              ) + 1;
+    
+          }
+        
         }
 
-      } else {
+      }
+
+      /*
+        Número automático.
+      */
+
+      else {
 
         numeroExibido =
           contador;
@@ -381,17 +459,29 @@ function renderCapitulos(historia) {
           "button"
         );
 
-      card.type = "button";
+
+      card.type =
+        "button";
 
       card.className =
         "historia-card";
 
 
+      /*
+        Se o capítulo tiver capa própria,
+        usa a própria.
+
+        Caso contrário:
+        usa a capa da história.
+      */
+
       const capa =
         normalizeAssetPath(
-          capitulo.capa || historia.capa,
+          capitulo.capa ||
+          historia.capa,
           "imagens/capas"
         );
+
 
       card.style.backgroundImage =
         capa
@@ -404,21 +494,31 @@ function renderCapitulos(historia) {
           "span"
         );
 
+
       titulo.className =
         "historia-titulo";
 
+
       titulo.textContent =
-        numeroExibido === ""
+        numeroExibido === -1
           ? capitulo.titulo
           : `${numeroExibido}. ${capitulo.titulo}`;
+
 
       card.appendChild(
         titulo
       );
 
 
+      /*
+        Verifica progresso.
+      */
+
       const progresso =
-        loadProgress(capitulo);
+        loadProgress(
+          capitulo
+        );
+
 
       if (
         progresso &&
@@ -430,11 +530,14 @@ function renderCapitulos(historia) {
             "span"
           );
 
+
         badge.className =
           "historia-progresso";
 
+
         badge.textContent =
           "Continuar";
+
 
         card.appendChild(
           badge
@@ -445,7 +548,11 @@ function renderCapitulos(historia) {
 
       card.addEventListener(
         "click",
-        () => openChapter(historia, capitulo)
+        () =>
+          openChapter(
+            historia,
+            capitulo
+          )
       );
 
 
@@ -459,29 +566,33 @@ function renderCapitulos(historia) {
 }
 
 
+/* =========================================================
+   VOLTAR DOS CAPÍTULOS
+   ========================================================= */
+
 if (btnVoltarCapitulos) {
 
   btnVoltarCapitulos.addEventListener(
     "click",
     () => {
 
-      currentHistoria = null;
+      currentHistoria =
+        null;
+
 
       menuCapitulos.classList.add(
         "hidden"
       );
+
 
       menuHistorias.classList.remove(
         "hidden"
       );
 
 
-      /*
-        Atualiza os selos de "Continuar"
-        do menu principal.
-      */
-
-      renderMenu(catalog);
+      renderMenu(
+        catalog
+      );
 
     }
   );
@@ -489,13 +600,22 @@ if (btnVoltarCapitulos) {
 }
 
 
-function historiaTemProgresso(historia) {
+/* =========================================================
+   VERIFICAR PROGRESSO DA HISTÓRIA
+   ========================================================= */
+
+function historiaTemProgresso(
+  historia
+) {
 
   return historia.capitulos.some(
     capitulo => {
 
       const progresso =
-        loadProgress(capitulo);
+        loadProgress(
+          capitulo
+        );
+
 
       return (
         progresso &&
@@ -509,28 +629,27 @@ function historiaTemProgresso(historia) {
 
 
 /* =========================================================
-   CARREGAR CATÁLOGO (historias.ini)
+   CARREGAR CATÁLOGO JSON
    ========================================================= */
 
 async function loadCatalog() {
 
   try {
 
-    const response = await fetch(
-      CONFIG.catalogFile,
-      {
-        cache: "no-cache"
-      }
-    );
+    const response =
+      await fetch(
+        CONFIG.catalogFile,
+        {
+          cache: "no-cache"
+        }
+      );
 
 
     if (!response.ok) {
 
-      console.warn(
-        `historias.ini não encontrado (${response.status}).`
+      throw new Error(
+        `historias.json não encontrado (${response.status}).`
       );
-
-      return [];
 
     }
 
@@ -539,16 +658,57 @@ async function loadCatalog() {
       await response.text();
 
 
-    return parseCatalog(text);
+    let data;
+
+
+    try {
+
+      data =
+        JSON.parse(text);
+
+    } catch (error) {
+
+      throw new Error(
+        "historias.json contém JSON inválido."
+      );
+
+    }
+
+
+    /*
+      Formato esperado:
+
+      {
+        "historias": [...]
+      }
+    */
+
+    if (
+      !data ||
+      !Array.isArray(
+        data.historias
+      )
+    ) {
+
+      throw new Error(
+        'historias.json precisa conter uma propriedade "historias" com uma lista.'
+      );
+
+    }
+
+
+    return normalizarCatalogo(
+      data.historias
+    );
 
   } catch (error) {
 
     console.warn(
-      "Não foi possível carregar historias.ini:",
+      "Não foi possível carregar historias.json:",
       error
     );
 
-    return [];
+    throw error;
 
   }
 
@@ -556,424 +716,102 @@ async function loadCatalog() {
 
 
 /* =========================================================
-   INTERPRETAR O HISTORIAS.INI
+   NORMALIZAR CATÁLOGO
    =========================================================
 
-   Um bloco por entrada, separado por linha em
-   branco. Dois tipos de bloco:
-
-   1) CABEÇALHO DE HISTÓRIA (sem "arquivo"):
-
-        [id-da-historia]
-        [titulo=Nome da série]
-        [capa=capa-geral.jpg]
-
-   2) CAPÍTULO (tem "arquivo"):
-
-        [id-da-historia/id-do-capitulo]
-        [titulo=Nome do capítulo]
-        [capa=capa-do-capitulo.jpg]
-        [arquivo=arquivo.txt]
-
-      O "/" liga o capítulo à história de mesmo
-      id à esquerda da barra. Pode vir declarada
-      antes ou depois do cabeçalho da história —
-      a ordem não importa.
-
-   Um capítulo SEM "/" no id (ou sem id nenhum)
-   vira uma história independente de capítulo
-   único — é o formato antigo, ainda funciona:
-
-        [titulo=Uma história qualquer]
-        [capa=capa.jpg]
-        [arquivo=historia.txt]
-
-   Exemplo completo com 2 capítulos:
-
-        [teresa]
-        [titulo=Teresa Morgana de Ipanema]
-        [capa=teresa.jpg]
-
-        [teresa/prologo]
-        [titulo=Prólogo]
-        [capa=teresa.jpg]
-        [arquivo=teresa.txt]
-
-        [teresa/ep1]
-        [titulo=Vida Serena, nada plena]
-        [capa=teresa_1.jpg]
-        [arquivo=teresa_1.txt]
-
-   NUMERAÇÃO DOS CAPÍTULOS (opcional):
-
-   Por padrão, os capítulos são numerados
-   automaticamente na ordem em que aparecem,
-   começando em 1. Dá pra mudar isso:
-
-   - [inicio=0] no cabeçalho da história:
-     a numeração automática passa a começar
-     em 0 (ou qualquer outro número).
-
-   - [numero=X] em um capítulo específico:
-     define manualmente o número exibido
-     pra aquele capítulo (aceita qualquer
-     valor, inclusive fora de ordem — útil
-     pra spin-offs, histórias não-lineares,
-     etc). Os capítulos seguintes sem
-     [numero] continuam a contagem a partir
-     dali.
-
-        [teresa]
-        [titulo=Teresa Morgana de Ipanema]
-        [inicio=0]
-
-        [teresa/prologo]
-        [numero=0]
-        [titulo=Prólogo]
-        [arquivo=teresa.txt]
-
-        [teresa/spinoff]
-        [numero=0.5]
-        [titulo=Spin-off: Um dia qualquer]
-        [arquivo=spinoff.txt]
-
-        [teresa/ep1]
-        [titulo=Vida Serena, nada plena]
-        [arquivo=teresa_1.txt]
+   Garante que os valores esperados
+   sempre existam, evitando erros
+   quando um campo for omitido.
    ========================================================= */
 
-function parseCatalog(rawText) {
+function normalizarCatalogo(
+  historias
+) {
 
-  rawText =
-    rawText.replace(
-      /^\uFEFF/,
-      ""
-    );
+  return historias.map(
+    historia => {
 
+      return {
 
-  const lines =
-    rawText.split(/\r?\n/);
-
-
-  const historiasPorId = {};
-
-  const ordemHistorias = [];
-
-  let current = null;
-
-  let contadorAnonimo = 0;
-
-
-  function getOrCreateHistoria(id, fields) {
-
-    if (!historiasPorId[id]) {
-
-      const historia = {
-
-        id,
+        id:
+          historia.id || "",
 
         titulo:
-          (fields && fields.titulo) || id,
+          historia.titulo ||
+          historia.id ||
+          "História sem título",
 
         capa:
-          (fields && fields.capa) || "",
+          historia.capa ||
+          "",
 
-        /*
-          A partir de que número a numeração
-          automática dos capítulos começa
-          (default: 1). Configurável via
-          [inicio=0] no cabeçalho da história.
-        */
+        inicio:
+          Number.isFinite(
+            Number(historia.inicio)
+          )
+            ? Number(historia.inicio)
+            : 1,
 
-        inicio: 1,
+        capitulos:
+          Array.isArray(
+            historia.capitulos
+          )
+            ? historia.capitulos.map(
+                capitulo => {
 
-        capitulos: []
+                  return {
 
-      };
+                    id:
+                      capitulo.id ||
+                      "",
 
-      historiasPorId[id] = historia;
+                    numero:
+                      capitulo.numero !== undefined
+                        ? capitulo.numero
+                        : null,
 
-      ordemHistorias.push(historia);
+                    titulo:
+                      capitulo.titulo ||
+                      capitulo.id ||
+                      "Capítulo sem título",
 
-    }
+                    capa:
+                      capitulo.capa ||
+                      "",
 
-    return historiasPorId[id];
+                    arquivo:
+                      capitulo.arquivo ||
+                      ""
 
-  }
+                  };
 
-
-  function commitBlock() {
-
-    if (!current) {
-
-      return;
-
-    }
-
-
-    const fields =
-      current.fields;
-
-    const rawId =
-      current.id;
-
-
-    if (fields.arquivo) {
-
-      /*
-        Bloco de CAPÍTULO.
-      */
-
-      let historiaId;
-
-      let capituloId = null;
-
-
-      if (rawId && rawId.includes("/")) {
-
-        const barraIndex =
-          rawId.indexOf("/");
-
-        historiaId =
-          rawId.slice(0, barraIndex).trim();
-
-        capituloId =
-          rawId.slice(barraIndex + 1).trim();
-
-      } else {
-
-        /*
-          Capítulo solto (sem "/"): vira
-          uma história independente de
-          capítulo único — formato antigo.
-        */
-
-        contadorAnonimo += 1;
-
-        historiaId =
-          rawId ||
-          fields.arquivo.replace(/\.txt$/i, "") ||
-          `historia-${contadorAnonimo}`;
-
-      }
-
-
-      const capitulo = {
-
-        id: capituloId,
-
-        titulo:
-          fields.titulo ||
-          capituloId ||
-          fields.arquivo.replace(/\.txt$/i, ""),
-
-        capa:
-          fields.capa || "",
-
-        arquivo:
-          fields.arquivo,
-
-        /*
-          Número manual e opcional (ex: [numero=0]).
-          Se não vier, é numerado automaticamente
-          na hora de renderizar (ver renderCapitulos).
-        */
-
-        numero:
-          fields.numero !== undefined
-            ? fields.numero.trim()
-            : null
+                }
+              )
+            : []
 
       };
 
-
-      const historia =
-        getOrCreateHistoria(
-          historiaId,
-          fields
-        );
-
-      historia.capitulos.push(
-        capitulo
-      );
-
-
-      aplicarInicio(
-        historia,
-        fields
-      );
-
-    } else if (
-      rawId ||
-      fields.titulo ||
-      fields.capa
-    ) {
-
-      /*
-        Bloco de CABEÇALHO DE HISTÓRIA.
-      */
-
-      contadorAnonimo += 1;
-
-      const id =
-        rawId ||
-        `historia-${contadorAnonimo}`;
-
-      const historia =
-        getOrCreateHistoria(
-          id,
-          fields
-        );
-
-      if (fields.titulo) {
-
-        historia.titulo =
-          fields.titulo;
-
-      }
-
-      if (fields.capa) {
-
-        historia.capa =
-          fields.capa;
-
-      }
-
-
-      aplicarInicio(
-        historia,
-        fields
-      );
-
     }
-
-
-    current = null;
-
-  }
-
-
-  /*
-    [inicio=N]: a partir de que número a
-    numeração automática dos capítulos
-    dessa história começa (default: 1).
-    Pode vir no cabeçalho da história ou
-    em qualquer um dos seus capítulos.
-  */
-
-  function aplicarInicio(historia, fields) {
-
-    if (fields.inicio === undefined) {
-
-      return;
-
-    }
-
-
-    const valor =
-      parseInt(fields.inicio, 10);
-
-    if (!Number.isNaN(valor)) {
-
-      historia.inicio = valor;
-
-    }
-
-  }
-
-
-  for (const line of lines) {
-
-    const trimmed =
-      line.trim();
-
-
-    if (!trimmed) {
-
-      commitBlock();
-
-      continue;
-
-    }
-
-
-    if (!current) {
-
-      current = {
-        id: null,
-        fields: {}
-      };
-
-    }
-
-
-    /*
-      Identificador do bloco: [nome] ou
-      [historia/capitulo], sem "=".
-    */
-
-    const idMatch =
-      trimmed.match(
-        /^\[([^=\]]+)\]$/
-      );
-
-    if (idMatch) {
-
-      current.id =
-        idMatch[1].trim();
-
-      continue;
-
-    }
-
-
-    /*
-      Campo: [chave=valor].
-    */
-
-    const fieldMatch =
-      trimmed.match(
-        /^\[([a-zA-Z0-9_]+)=(.*?)\]$/
-      );
-
-    if (fieldMatch) {
-
-      current.fields[
-        fieldMatch[1].toLowerCase()
-      ] = fieldMatch[2].trim();
-
-      continue;
-
-    }
-
-  }
-
-
-  commitBlock();
-
-
-  /*
-    Descarta cabeçalhos de história que
-    ficaram sem nenhum capítulo (ex: erro
-    de digitação no "/").
-  */
-
-  return ordemHistorias.filter(
-    historia => historia.capitulos.length > 0
   );
 
 }
 
 
 /* =========================================================
-   ABRIR / FECHAR UMA HISTÓRIA
+   ABRIR CAPÍTULO
    ========================================================= */
 
-async function openChapter(historia, capitulo) {
+async function openChapter(
+  historia,
+  capitulo
+) {
 
-  currentHistoria = historia;
+  currentHistoria =
+    historia;
 
-  currentCapitulo = capitulo;
+  currentCapitulo =
+    capitulo;
+
 
   CONFIG.textFile =
     `texto/${capitulo.arquivo}`;
@@ -982,7 +820,10 @@ async function openChapter(historia, capitulo) {
   document.title =
     historia.capitulos.length > 1
       ? `${historia.titulo} — ${capitulo.titulo}`
-      : (capitulo.titulo || historia.titulo);
+      : (
+          capitulo.titulo ||
+          historia.titulo
+        );
 
 
   storyContainer.innerHTML =
@@ -1014,16 +855,24 @@ async function openChapter(historia, capitulo) {
 
     await loadStory();
 
-    await resumeProgress(capitulo);
+    await resumeProgress(
+      capitulo
+    );
 
   } catch (error) {
 
-    showError(error);
+    showError(
+      error
+    );
 
   }
 
 }
 
+
+/* =========================================================
+   FECHAR CAPÍTULO
+   ========================================================= */
 
 function closeStory() {
 
@@ -1045,22 +894,20 @@ function closeStory() {
   );
 
 
-  currentSceneIndex = -1;
+  currentSceneIndex =
+    -1;
 
-  scenes = [];
+  scenes =
+    [];
 
 
   const historia =
     currentHistoria;
 
-  currentCapitulo = null;
 
+  currentCapitulo =
+    null;
 
-  /*
-    Volta pra tela de capítulos se a
-    história tiver mais de um; senão,
-    volta direto pro menu principal.
-  */
 
   if (
     historia &&
@@ -1071,19 +918,27 @@ function closeStory() {
       historia
     );
 
+
     menuCapitulos.classList.remove(
       "hidden"
     );
 
-  } else {
+  }
 
-    currentHistoria = null;
+  else {
+
+    currentHistoria =
+      null;
+
 
     menuHistorias.classList.remove(
       "hidden"
     );
 
-    renderMenu(catalog);
+
+    renderMenu(
+      catalog
+    );
 
   }
 
@@ -1107,10 +962,12 @@ window.addEventListener(
 
 
 /* =========================================================
-   SALVAR / CARREGAR PROGRESSO (localStorage)
+   PROGRESSO
    ========================================================= */
 
-function progressKey(entry) {
+function progressKey(
+  entry
+) {
 
   return `progresso:${entry.arquivo}`;
 
@@ -1125,7 +982,10 @@ function saveProgress() {
 
   }
 
-  if (currentSceneIndex < 0) {
+
+  if (
+    currentSceneIndex < 0
+  ) {
 
     return;
 
@@ -1135,10 +995,16 @@ function saveProgress() {
   try {
 
     localStorage.setItem(
-      progressKey(currentCapitulo),
+
+      progressKey(
+        currentCapitulo
+      ),
 
       JSON.stringify({
-        sceneIndex: currentSceneIndex
+
+        sceneIndex:
+          currentSceneIndex
+
       })
 
     );
@@ -1155,7 +1021,9 @@ function saveProgress() {
 }
 
 
-function loadProgress(entry) {
+function loadProgress(
+  entry
+) {
 
   try {
 
@@ -1163,6 +1031,7 @@ function loadProgress(entry) {
       localStorage.getItem(
         progressKey(entry)
       );
+
 
     return raw
       ? JSON.parse(raw)
@@ -1177,10 +1046,19 @@ function loadProgress(entry) {
 }
 
 
-async function resumeProgress(entry) {
+/* =========================================================
+   RETOMAR PROGRESSO
+   ========================================================= */
+
+async function resumeProgress(
+  entry
+) {
 
   const progress =
-    loadProgress(entry);
+    loadProgress(
+      entry
+    );
+
 
   if (
     !progress ||
@@ -1199,7 +1077,10 @@ async function resumeProgress(entry) {
       scenes.length - 1
     );
 
-  if (index <= 0) {
+
+  if (
+    index <= 0
+  ) {
 
     return;
 
@@ -1209,6 +1090,7 @@ async function resumeProgress(entry) {
   const target =
     scenes[index];
 
+
   if (!target) {
 
     return;
@@ -1216,20 +1098,18 @@ async function resumeProgress(entry) {
   }
 
 
-  /*
-    Pula direto sem animação de
-    scroll suave.
-  */
-
   const previousBehavior =
     document.documentElement.style.scrollBehavior;
+
 
   document.documentElement.style.scrollBehavior =
     "auto";
 
+
   target.element.scrollIntoView({
     block: "start"
   });
+
 
   requestAnimationFrame(
     () => {
@@ -1241,23 +1121,26 @@ async function resumeProgress(entry) {
   );
 
 
-  await finishTransition(index);
+  await finishTransition(
+    index
+  );
 
 }
 
 
 /* =========================================================
-   CARREGAR TXT
+   CARREGAR HISTÓRIA TXT
    ========================================================= */
 
 async function loadStory() {
 
-  const response = await fetch(
-    CONFIG.textFile,
-    {
-      cache: "no-cache"
-    }
-  );
+  const response =
+    await fetch(
+      CONFIG.textFile,
+      {
+        cache: "no-cache"
+      }
+    );
 
 
   if (!response.ok) {
@@ -1278,82 +1161,87 @@ async function loadStory() {
 
 
   const parsed =
-    parseStory(text, defaults);
+    parseStory(
+      text,
+      defaults
+    );
 
 
   if (!parsed.length) {
 
     throw new Error(
-      "O arquivo teresa.txt não contém cenas válidas."
+      `${CONFIG.textFile} não contém cenas válidas.`
     );
 
   }
 
 
-  renderStory(parsed);
+  renderStory(
+    parsed
+  );
+
 
   createBackgroundStage();
 
   setupVisibilityObserver();
 
 
-    /*
-      Primeira cena começa ativa.
-    */
-    
-    currentSceneIndex = 0;
-    
-    await setLayerImage(
-      backgroundLayerA,
-      scenes[0].image
-    );
-    
-    
-    /*
-      Garante que a primeira camada esteja visível.
-    */
-    
-    backgroundLayerA.style.opacity = "1";
-    backgroundLayerB.style.opacity = "0";
-    
-    
-    /*
-      Agora calcula a posição inicial.
-    */
-    
-    requestAnimationFrame(
-      () => {
-    
-        updateBackground(true);
-    
-      }
-    );
+  currentSceneIndex =
+    0;
+
+
+  await setLayerImage(
+    backgroundLayerA,
+    scenes[0].image
+  );
+
+
+  backgroundLayerA.style.opacity =
+    "1";
+
+  backgroundLayerB.style.opacity =
+    "0";
+
+
+  requestAnimationFrame(
+    () => {
+
+      updateBackground(
+        true
+      );
+
+    }
+  );
+
 }
 
 
 /* =========================================================
-   CARREGAR DEFAULT.INI
+   CARREGAR DEFAULT.JSON
    ========================================================= */
 
 async function loadDefaults() {
 
   try {
 
-    const response = await fetch(
-      CONFIG.defaultsFile,
-      {
-        cache: "no-cache"
-      }
-    );
+    const response =
+      await fetch(
+        CONFIG.defaultsFile,
+        {
+          cache: "no-cache"
+        }
+      );
 
 
     if (!response.ok) {
 
       console.warn(
-        `default.ini não encontrado (${response.status}), seguindo sem defaults.`
+        `default.json não encontrado (${response.status}).`
       );
 
-      return {};
+      return {
+        personagens: {}
+      };
 
     }
 
@@ -1362,132 +1250,46 @@ async function loadDefaults() {
       await response.text();
 
 
-    return parseIniSections(text);
+    let data;
+
+
+    try {
+
+      data =
+        JSON.parse(text);
+
+    } catch (error) {
+
+      throw new Error(
+        "default.json contém JSON inválido."
+      );
+
+    }
+
+
+    return {
+
+      personagens:
+        data.personagens &&
+        typeof data.personagens === "object"
+          ? data.personagens
+          : {}
+
+    };
 
   } catch (error) {
 
     console.warn(
-      "Não foi possível carregar default.ini, seguindo sem defaults:",
+      "Não foi possível carregar default.json:",
       error
     );
 
-    return {};
+
+    return {
+      personagens: {}
+    };
 
   }
-
-}
-
-
-/* =========================================================
-   INTERPRETAR ARQUIVOS .INI (default.ini / historias.ini)
-   =========================================================
-
-   Formato genérico:
-
-       [NomeDaSeção]
-       [chave=valor]
-       [outraChave=outroValor]
-
-       [OutraSeção]
-       [chave=valor]
-
-   Usado tanto pelo default.ini (seção = personagem,
-   chaves = imagem/transicao/audio/...) quanto pelo
-   historias.ini (seção = id da história, chaves =
-   titulo/capa/arquivo).
-   ========================================================= */
-
-function parseIniSections(rawText) {
-
-  rawText =
-    rawText.replace(
-      /^\uFEFF/,
-      ""
-    );
-
-
-  const lines =
-    rawText.split(/\r?\n/);
-
-
-  const defaults = {};
-
-  let currentSection = null;
-
-
-  for (const line of lines) {
-
-    const trimmed =
-      line.trim();
-
-
-    if (!trimmed) {
-
-      continue;
-
-    }
-
-
-    /*
-      Cabeçalho de seção: [Nome], sem "=".
-    */
-
-    const sectionMatch =
-      trimmed.match(
-        /^\[([^=\]]+)\]$/
-      );
-
-
-    if (sectionMatch) {
-
-      currentSection =
-        sectionMatch[1].trim();
-
-      if (!defaults[currentSection]) {
-
-        defaults[currentSection] = {};
-
-      }
-
-      continue;
-
-    }
-
-
-    if (!currentSection) {
-
-      continue;
-
-    }
-
-
-    /*
-      Comandos dentro da seção: [chave=valor].
-      Aceita qualquer nome de chave.
-    */
-
-    const commandMatch =
-      trimmed.match(
-        /^\[([a-zA-Z0-9_]+)=(.*?)\]$/
-      );
-
-
-    if (commandMatch) {
-
-      const key =
-        commandMatch[1].toLowerCase();
-
-      const value =
-        commandMatch[2].trim();
-
-      defaults[currentSection][key] = value;
-
-    }
-
-  }
-
-
-  return defaults;
 
 }
 
@@ -1496,15 +1298,36 @@ function parseIniSections(rawText) {
    INTERPRETAR O TXT
    ========================================================= */
 
-function parseStory(rawText, defaults) {
+function parseStory(
+  rawText,
+  defaults
+) {
 
-  defaults = defaults || {};
+  defaults =
+    defaults || {};
 
-  let currentAudio = "";
+  const personagens =
+    defaults.personagens || {};
 
-  /*
-    Remove BOM de UTF-8.
-  */
+
+  let currentAudio =
+    "";
+
+  let currentImage =
+    "";
+
+  let currentTitle =
+    "";
+
+  let currentSubtitle =
+    "";
+
+  let currentTransition =
+    "blur";
+
+  let currentCharacter =
+    "";
+
 
   rawText =
     rawText.replace(
@@ -1514,23 +1337,16 @@ function parseStory(rawText, defaults) {
 
 
   const lines =
-    rawText.split(/\r?\n/);
+    rawText.split(
+      /\r?\n/
+    );
 
 
-  let currentImage = "";
+  const blocks =
+    [];
 
-  let currentTitle = "";
-
-  let currentSubtitle = "";
-
-  let currentTransition = "blur";
-
-  let currentCharacter = "";
-
-
-  const blocks = [];
-
-  let paragraphLines = [];
+  let paragraphLines =
+    [];
 
 
   /* -------------------------------------------------------
@@ -1542,13 +1358,17 @@ function parseStory(rawText, defaults) {
     const paragraph =
       paragraphLines
         .join(" ")
-        .replace(/\s+/g, " ")
+        .replace(
+          /\s+/g,
+          " "
+        )
         .trim();
 
 
     if (!paragraph) {
 
-      paragraphLines = [];
+      paragraphLines =
+        [];
 
       return;
 
@@ -1557,19 +1377,26 @@ function parseStory(rawText, defaults) {
 
     blocks.push({
 
-      text: paragraph,
+      text:
+        paragraph,
 
-      image: currentImage,
+      image:
+        currentImage,
 
-      title: currentTitle,
+      title:
+        currentTitle,
 
-      subtitle: currentSubtitle,
+      subtitle:
+        currentSubtitle,
 
-      transition: currentTransition,
-      
-      audio: currentAudio,
+      transition:
+        currentTransition,
 
-      character: currentCharacter
+      audio:
+        currentAudio,
+
+      character:
+        currentCharacter
 
     });
 
@@ -1579,27 +1406,34 @@ function parseStory(rawText, defaults) {
       somente ao próximo bloco.
     */
 
-    currentTitle = "";
+    currentTitle =
+      "";
 
-    currentSubtitle = "";
+    currentSubtitle =
+      "";
 
-    paragraphLines = [];
+    paragraphLines =
+      [];
 
   }
 
 
   /* -------------------------------------------------------
-     LER LINHA POR LINHA
+     PROCESSAR LINHAS
      ------------------------------------------------------- */
 
-  for (const line of lines) {
+  for (
+    const line
+    of lines
+  ) {
 
     const trimmed =
       line.trim();
 
 
     /*
-      Linha vazia = novo parágrafo.
+      Linha vazia =
+      novo parágrafo.
     */
 
     if (!trimmed) {
@@ -1699,38 +1533,47 @@ function parseStory(rawText, defaults) {
       continue;
 
     }
-    
-        /* -----------------------------------------------------
+
+
+    /* -----------------------------------------------------
        ÁUDIO
        ----------------------------------------------------- */
-    
+
     const audioMatch =
       trimmed.match(
         /^\[audio=(.*?)\]$/i
       );
-    
+
+
     if (audioMatch) {
-    
+
       flushParagraph();
-    
+
+
       const audioValue =
         audioMatch[1].trim();
-    
+
+
       if (
-        audioValue.toLowerCase() === "stop"
+        audioValue.toLowerCase() ===
+        "stop"
       ) {
-    
-        currentAudio = "";
-    
-      } else {
-    
+
+        currentAudio =
+          "";
+
+      }
+
+      else {
+
         currentAudio =
           audioValue;
-    
+
       }
-    
+
+
       continue;
-    
+
     }
 
 
@@ -1743,50 +1586,64 @@ function parseStory(rawText, defaults) {
         /^\[personagem=(.*?)\]$/i
       );
 
+
     if (characterMatch) {
 
       flushParagraph();
+
 
       currentCharacter =
         characterMatch[1].trim();
 
 
-      /*
-        Aplica os defaults do default.ini
-        para este personagem, se existirem.
-        Só sobrescreve o que estiver definido
-        na seção — o resto continua como estava.
-      */
-
       const characterDefaults =
-        defaults[currentCharacter];
+        personagens[
+          currentCharacter
+        ];
 
-      if (characterDefaults) {
 
-        if (characterDefaults.imagem !== undefined) {
+      if (
+        characterDefaults
+      ) {
+
+        if (
+          characterDefaults.imagem !==
+          undefined
+        ) {
 
           currentImage =
             characterDefaults.imagem;
 
         }
 
-        if (characterDefaults.transicao !== undefined) {
+
+        if (
+          characterDefaults.transicao !==
+          undefined
+        ) {
 
           currentTransition =
-            characterDefaults.transicao.toLowerCase();
+            characterDefaults.transicao
+              .toLowerCase();
 
         }
 
-        if (characterDefaults.audio !== undefined) {
+
+        if (
+          characterDefaults.audio !==
+          undefined
+        ) {
 
           currentAudio =
-            characterDefaults.audio === "stop"
-              ? ""
-              : characterDefaults.audio;
+            characterDefaults.audio
+              .toLowerCase() === "stop"
+                ? ""
+                : characterDefaults.audio;
 
         }
 
       }
+
 
       continue;
 
@@ -1812,19 +1669,22 @@ function parseStory(rawText, defaults) {
       Texto normal.
     */
 
-    paragraphLines.push(trimmed);
+    paragraphLines.push(
+      trimmed
+    );
 
   }
 
 
   /*
-    Não esquecer o último parágrafo.
+    Último parágrafo.
   */
 
   flushParagraph();
 
 
   return blocks;
+
 }
 
 
@@ -1832,7 +1692,9 @@ function parseStory(rawText, defaults) {
    RENDERIZAR HISTÓRIA
    ========================================================= */
 
-function renderStory(parsedScenes) {
+function renderStory(
+  parsedScenes
+) {
 
   const story =
     document.getElementById(
@@ -1840,16 +1702,16 @@ function renderStory(parsedScenes) {
     );
 
 
-  story.innerHTML = "";
+  story.innerHTML =
+    "";
 
 
   scenes =
     parsedScenes.map(
-      (scene, index) => {
-
-        /*
-          SECTION
-        */
+      (
+        scene,
+        index
+      ) => {
 
         const section =
           document.createElement(
@@ -1865,10 +1727,6 @@ function renderStory(parsedScenes) {
           index;
 
 
-        /*
-          CONTAINER
-        */
-
         const inner =
           document.createElement(
             "div"
@@ -1878,10 +1736,6 @@ function renderStory(parsedScenes) {
         inner.className =
           "scene-inner";
 
-
-        /*
-          CAIXA DE TEXTO
-        */
 
         const box =
           document.createElement(
@@ -1897,7 +1751,9 @@ function renderStory(parsedScenes) {
           TÍTULO
         */
 
-        if (scene.title) {
+        if (
+          scene.title
+        ) {
 
           const title =
             document.createElement(
@@ -1924,7 +1780,9 @@ function renderStory(parsedScenes) {
           SUBTÍTULO
         */
 
-        if (scene.subtitle) {
+        if (
+          scene.subtitle
+        ) {
 
           const subtitle =
             document.createElement(
@@ -1948,7 +1806,7 @@ function renderStory(parsedScenes) {
 
 
         /*
-          PARÁGRAFO
+          TEXTO
         */
 
         const paragraph =
@@ -1985,7 +1843,8 @@ function renderStory(parsedScenes) {
 
           ...scene,
 
-          element: section,
+          element:
+            section,
 
           image:
             normalizeImagePath(
@@ -2000,14 +1859,17 @@ function renderStory(parsedScenes) {
 
       }
     );
+
 }
 
 
 /* =========================================================
-   NORMALIZAR CAMINHO DA IMAGEM
+   NORMALIZAR IMAGEM
    ========================================================= */
 
-function normalizeImagePath(image) {
+function normalizeImagePath(
+  image
+) {
 
   return normalizeAssetPath(
     image,
@@ -2017,11 +1879,10 @@ function normalizeImagePath(image) {
 }
 
 
-/* =========================================================
-   NORMALIZAR CAMINHO DE QUALQUER ASSET (imagens/capas/...)
-   ========================================================= */
-
-function normalizeAssetPath(path, folder) {
+function normalizeAssetPath(
+  path,
+  folder
+) {
 
   if (!path) {
 
@@ -2029,10 +1890,6 @@ function normalizeAssetPath(path, folder) {
 
   }
 
-
-  /*
-    URLs externas ou caminhos absolutos.
-  */
 
   if (
 
@@ -2059,10 +1916,6 @@ function normalizeAssetPath(path, folder) {
   }
 
 
-  /*
-    Se já contém a pasta certa.
-  */
-
   if (
     path.startsWith(
       `${folder}/`
@@ -2074,42 +1927,41 @@ function normalizeAssetPath(path, folder) {
   }
 
 
-  /*
-    Caso normal:
-        cena01.jpg  (folder = "imagens")
-
-    vira:
-        imagens/cena01.jpg
-  */
-
   return `${folder}/${path}`;
+
 }
 
 
 /* =========================================================
-   CRIAR BACKGROUND
+   BACKGROUND
    ========================================================= */
 
 function createBackgroundStage() {
 
-  /*
-    Já existe (troca de história):
-    só reseta o estado das camadas,
-    sem duplicar elementos no DOM.
-  */
+  if (
+    backgroundStage
+  ) {
 
-  if (backgroundStage) {
+    layers[0].style.backgroundImage =
+      "none";
 
-    layers[0].style.backgroundImage = "none";
-    layers[1].style.backgroundImage = "none";
+    layers[1].style.backgroundImage =
+      "none";
 
-    layers[0].style.filter = "blur(0px)";
-    layers[1].style.filter = "blur(0px)";
+    layers[0].style.filter =
+      "blur(0px)";
 
-    layers[0].style.opacity = "1";
-    layers[1].style.opacity = "0";
+    layers[1].style.filter =
+      "blur(0px)";
 
-    activeLayerIndex = 0;
+    layers[0].style.opacity =
+      "1";
+
+    layers[1].style.opacity =
+      "0";
+
+    activeLayerIndex =
+      0;
 
     return;
 
@@ -2126,10 +1978,6 @@ function createBackgroundStage() {
     "background-stage";
 
 
-  /*
-    CAMADA A
-  */
-
   backgroundLayerA =
     document.createElement(
       "div"
@@ -2143,10 +1991,6 @@ function createBackgroundStage() {
   backgroundLayerA.dataset.image =
     "";
 
-
-  /*
-    CAMADA B
-  */
 
   backgroundLayerB =
     document.createElement(
@@ -2162,24 +2006,6 @@ function createBackgroundStage() {
     "";
 
 
-  /*
-    FAIXA DE BLUR
-  */
-
-  /*transitionBlur =
-    document.createElement(
-      "div"
-    );
-
-
-  transitionBlur.id =
-    "transition-blur";*/
-
-
-  /*
-    Montar árvore.
-  */
-
   backgroundStage.appendChild(
     backgroundLayerA
   );
@@ -2190,47 +2016,42 @@ function createBackgroundStage() {
   );
 
 
-  /*backgroundStage.appendChild(
-    transitionBlur
-  );*/
-
-
-  /*
-    Colocar atrás do conteúdo.
-  */
-
   document.body.prepend(
     backgroundStage
   );
-  
-  /*
-      Sistema usado pelas funções de transição.
-    */
-    
-    layers = [
-      backgroundLayerA,
-      backgroundLayerB
-    ];
-    
-    activeLayerIndex = 0;
-    
-    
-    /*
-      A primeira camada começa ativa.
-    */
-    
-    backgroundLayerA.style.opacity = "1";
-    backgroundLayerB.style.opacity = "0";
+
+
+  layers = [
+
+    backgroundLayerA,
+
+    backgroundLayerB
+
+  ];
+
+
+  activeLayerIndex =
+    0;
+
+
+  backgroundLayerA.style.opacity =
+    "1";
+
+  backgroundLayerB.style.opacity =
+    "0";
+
 }
 
 
 /* =========================================================
-   ANIMAÇÃO DE ENTRADA DO TEXTO
+   OBSERVER
    ========================================================= */
 
 function setupVisibilityObserver() {
 
-  if (visibilityObserver) {
+  if (
+    visibilityObserver
+  ) {
 
     visibilityObserver.disconnect();
 
@@ -2280,7 +2101,9 @@ function setupVisibilityObserver() {
   }
 
 
-  visibilityObserver = observer;
+  visibilityObserver =
+    observer;
+
 }
 
 
@@ -2294,14 +2117,17 @@ window.addEventListener(
 
   () => {
 
-    if (scrollQueued) {
+    if (
+      scrollQueued
+    ) {
 
       return;
 
     }
 
 
-    scrollQueued = true;
+    scrollQueued =
+      true;
 
 
     requestAnimationFrame(
@@ -2312,7 +2138,8 @@ window.addEventListener(
         );
 
 
-        scrollQueued = false;
+        scrollQueued =
+          false;
 
       }
     );
@@ -2331,360 +2158,398 @@ window.addEventListener(
    ========================================================= */
 
 window.addEventListener(
-
   "resize",
-
   () => {
-
-    updateBackground(
-      false
-    );
-
+    updateBackground(false);
   }
-
 );
 
 
 /* =========================================================
-   ATUALIZAR BACKGROUND
+   BACKGROUND / TRANSIÇÕES
    ========================================================= */
 
 function updateBackground() {
 
-    if (!scenes.length || !layers.length) {
-        return;
-    }
+  if (
+    !scenes.length ||
+    !layers.length
+  ) {
 
-    const viewportHeight = window.innerHeight;
+    return;
 
-    /* =====================================================
-       DESCENDO — próxima cena
-       ===================================================== */
-
-    const nextIndex = currentSceneIndex + 1;
-
-    if (nextIndex < scenes.length) {
-
-        const nextScene = scenes[nextIndex];
-
-        const nextRect =
-            nextScene.element.getBoundingClientRect();
-
-        const startY =
-            viewportHeight * CONFIG.transitionStart;
-
-        const endY =
-            viewportHeight * CONFIG.transitionEnd;
-
-        /*
-         * A próxima cena entrou na área de transição.
-         */
-
-        if (
-            nextRect.top <= startY &&
-            nextRect.top >= endY
-        ) {
-
-            const progress = clamp(
-                (startY - nextRect.top) /
-                (startY - endY),
-                0,
-                1
-            );
-
-            applyTransition(
-                currentSceneIndex,
-                nextIndex,
-                progress
-            );
-
-            return;
-        }
-
-        /*
-         * A transição terminou.
-         */
-
-        if (nextRect.top < endY) {
-
-            finishTransition(nextIndex);
-
-            return;
-        }
-    }
+  }
 
 
-    /* =====================================================
-       SUBINDO — cena anterior
-       ===================================================== */
+  const viewportHeight =
+    window.innerHeight;
 
-    const previousIndex =
-        currentSceneIndex - 1;
 
-    if (previousIndex >= 0) {
+  /*
+    DESCENDO
+  */
 
-        const previousScene =
-            scenes[previousIndex];
+  const nextIndex =
+    currentSceneIndex + 1;
 
-        const previousRect =
-            previousScene.element
-                .getBoundingClientRect();
 
-        const startY =
-            viewportHeight * CONFIG.transitionEnd;
+  if (
+    nextIndex <
+    scenes.length
+  ) {
 
-        const endY =
-            viewportHeight * CONFIG.transitionStart;
+    const nextScene =
+      scenes[nextIndex];
 
-        /*
-         * A cena anterior está entrando
-         * na área de transição.
-         */
 
-        if (
-            previousRect.top >= startY &&
-            previousRect.top <= endY
-        ) {
+    const nextRect =
+      nextScene.element
+        .getBoundingClientRect();
 
-            const progress = clamp(
-                (previousRect.top - startY) /
-                (endY - startY),
-                0,
-                1
-            );
 
-            applyTransition(
-                currentSceneIndex,
-                previousIndex,
-                progress
-            );
+    const startY =
+      viewportHeight *
+      CONFIG.transitionStart;
 
-            return;
-        }
 
-        /*
-         * Chegamos completamente à cena anterior.
-         */
+    const endY =
+      viewportHeight *
+      CONFIG.transitionEnd;
 
-        if (previousRect.top > endY) {
 
-            finishTransition(previousIndex);
+    if (
 
-            return;
-        }
+      nextRect.top <= startY &&
+
+      nextRect.top >= endY
+
+    ) {
+
+      const progress =
+        clamp(
+
+          (startY - nextRect.top) /
+          (startY - endY),
+
+          0,
+          1
+
+        );
+
+
+      applyTransition(
+
+        currentSceneIndex,
+
+        nextIndex,
+
+        progress
+
+      );
+
+
+      return;
+
     }
 
 
-    /*
-     * Primeira cena:
-     * remove qualquer blur residual.
-     */
+    if (
+      nextRect.top <
+      endY
+    ) {
 
-    if (currentSceneIndex === 0) {
+      finishTransition(
+        nextIndex
+      );
 
-        layers[
-            1 - activeLayerIndex
-        ].style.opacity = "0";
 
-        //transitionBlur.style.opacity = "0";
+      return;
+
     }
+
+  }
+
+
+  /*
+    SUBINDO
+  */
+
+  const previousIndex =
+    currentSceneIndex - 1;
+
+
+  if (
+    previousIndex >= 0
+  ) {
+
+    const previousScene =
+      scenes[previousIndex];
+
+
+    const previousRect =
+      previousScene.element
+        .getBoundingClientRect();
+
+
+    const startY =
+      viewportHeight *
+      CONFIG.transitionEnd;
+
+
+    const endY =
+      viewportHeight *
+      CONFIG.transitionStart;
+
+
+    if (
+
+      previousRect.top >= startY &&
+
+      previousRect.top <= endY
+
+    ) {
+
+      const progress =
+        clamp(
+
+          (previousRect.top - startY) /
+          (endY - startY),
+
+          0,
+          1
+
+        );
+
+
+      applyTransition(
+
+        currentSceneIndex,
+
+        previousIndex,
+
+        progress
+
+      );
+
+
+      return;
+
+    }
+
+
+    if (
+      previousRect.top >
+      endY
+    ) {
+
+      finishTransition(
+        previousIndex
+      );
+
+
+      return;
+
+    }
+
+  }
+
+
+  if (
+    currentSceneIndex === 0
+  ) {
+
+    layers[
+      1 - activeLayerIndex
+    ].style.opacity =
+      "0";
+
+  }
+
 }
+
+
+/* =========================================================
+   APLICAR TRANSIÇÃO
+   ========================================================= */
 
 async function applyTransition(
-    fromIndex,
-    toIndex,
-    progress
+  fromIndex,
+  toIndex,
+  progress
 ) {
 
-    const fromScene =
-        scenes[fromIndex];
-
-    const toScene =
-        scenes[toIndex];
-
-    if (!fromScene || !toScene) {
-        return;
-    }
+  const fromScene =
+    scenes[fromIndex];
 
 
-    /*
-     * Camada atualmente visível.
-     */
-
-    const fromLayer =
-        layers[activeLayerIndex];
+  const toScene =
+    scenes[toIndex];
 
 
-    /*
-     * Segunda camada.
-     */
+  if (
+    !fromScene ||
+    !toScene
+  ) {
 
-    const nextLayerIndex =
-        1 - activeLayerIndex;
+    return;
 
-    const toLayer =
-        layers[nextLayerIndex];
-
-
-    /*
-     * Carrega a imagem da cena destino.
-     */
-
-    await setLayerImage(
-        toLayer,
-        toScene.image
-    );
+  }
 
 
-    /*
-     * Crossfade.
-     */
-
-    toLayer.style.opacity =
-        String(progress);
-
-    fromLayer.style.opacity =
-        String(1 - progress);
+  const fromLayer =
+    layers[
+      activeLayerIndex
+    ];
 
 
-    /*
-     * Blur contínuo.
-     */
+  const nextLayerIndex =
+    1 - activeLayerIndex;
 
-    if (
-        toScene.transition === "blur"
-    ) {
 
-        const blur =
-            CONFIG.maxBlur *
-            (1 - progress);
+  const toLayer =
+    layers[
+      nextLayerIndex
+    ];
 
-        toLayer.style.filter =
-            `blur(${blur}px)`;
 
-        /* transitionBlur.style.opacity =
-            String(
-                CONFIG.maxTransitionBlurOpacity *
-                (1 - progress)
-            ); */
+  await setLayerImage(
+    toLayer,
+    toScene.image
+  );
 
-    }
 
-    else {
+  toLayer.style.opacity =
+    String(progress);
 
-        toLayer.style.filter =
-            "blur(0px)";
 
-        /*transitionBlur.style.opacity =
-            "0";*/
-    }
+  fromLayer.style.opacity =
+    String(1 - progress);
+
+
+  if (
+    toScene.transition ===
+    "blur"
+  ) {
+
+    const blur =
+      CONFIG.maxBlur *
+      (1 - progress);
+
+
+    toLayer.style.filter =
+      `blur(${blur}px)`;
+
+  }
+
+  else {
+
+    toLayer.style.filter =
+      "blur(0px)";
+
+  }
+
 }
 
-async function finishTransition(targetIndex) {
 
-    if (
-        targetIndex < 0 ||
-        targetIndex >= scenes.length
+/* =========================================================
+   FINALIZAR TRANSIÇÃO
+   ========================================================= */
+
+async function finishTransition(
+  targetIndex
+) {
+
+  if (
+
+    targetIndex < 0 ||
+
+    targetIndex >= scenes.length
+
+  ) {
+
+    return;
+
+  }
+
+
+  const targetScene =
+    scenes[targetIndex];
+
+
+  const targetLayerIndex =
+    1 - activeLayerIndex;
+
+
+  const targetLayer =
+    layers[
+      targetLayerIndex
+    ];
+
+
+  await setLayerImage(
+    targetLayer,
+    targetScene.image
+  );
+
+
+  targetLayer.style.opacity =
+    "1";
+
+
+  targetLayer.style.filter =
+    "blur(0px)";
+
+
+  const oldLayer =
+    layers[
+      activeLayerIndex
+    ];
+
+
+  oldLayer.style.opacity =
+    "0";
+
+
+  oldLayer.style.filter =
+    "blur(0px)";
+
+
+  activeLayerIndex =
+    targetLayerIndex;
+
+
+  currentSceneIndex =
+    targetIndex;
+
+
+  saveProgress();
+
+
+  if (
+      audioEnabled &&
+      targetScene.audio
     ) {
-        return;
+    
+      playAudio(
+        targetScene.audio
+      );
+    
     }
-
-
-    const targetScene =
-        scenes[targetIndex];
-
-
-    const targetLayerIndex =
-        1 - activeLayerIndex;
-
-    const targetLayer =
-        layers[targetLayerIndex];
-
-
-    /*
-     * Garante que a imagem correta
-     * esteja na camada de destino.
-     */
-
-    await setLayerImage(
-        targetLayer,
-        targetScene.image
-    );
-
-
-    /*
-     * Nova camada fica totalmente visível.
-     */
-
-    targetLayer.style.opacity = "1";
-
-    targetLayer.style.filter =
-        "blur(0px)";
-
-
-    /*
-     * Antiga camada desaparece.
-     */
-
-    const oldLayer =
-        layers[activeLayerIndex];
-
-    oldLayer.style.opacity = "0";
-
-    oldLayer.style.filter =
-        "blur(0px)";
-
-
-    /*
-     * Troca oficialmente a camada ativa.
-     */
-
-    activeLayerIndex =
-        targetLayerIndex;
-
-
-    /*
-     * Atualiza a cena atual.
-     */
-
-    currentSceneIndex =
-        targetIndex;
-
-
-    /*
-     * Salva automaticamente onde
-     * o leitor parou.
-     */
-
-    saveProgress();
-
-
-    /*
-     * Remove blur superior.
-     */
-
-    /*transitionBlur.style.opacity =
-        "0";*/
-        
-    if (targetScene.audio) {
-
-      if (audioUnlocked) {
     
-        playAudio(
-          targetScene.audio
-        );
-    
-      }
-    
-    } else {
+    else if (
+      !audioEnabled ||
+      !targetScene.audio
+    ) {
     
       stopAudio();
     
     }
+    
 }
 
+
 /* =========================================================
-   DEFINIR IMAGEM
+   IMAGEM
    ========================================================= */
 
 function setLayerImage(
@@ -2692,54 +2557,64 @@ function setLayerImage(
   image
 ) {
 
-  if (!image) {
+  return new Promise(
+    resolve => {
 
-    layer.style.backgroundImage =
-      "none";
+      if (!image) {
 
-    return;
+        layer.style.backgroundImage =
+          "none";
 
-  }
+        resolve();
 
+        return;
 
-  /*
-    Pré-carregar imagem.
-  */
-
-  const img =
-    new Image();
+      }
 
 
-  img.onload =
-    () => {
-
-      layer.style.backgroundImage =
-        `url("${escapeCssUrl(image)}")`;
-
-    };
+      const img =
+        new Image();
 
 
-  img.onerror =
-    () => {
+      img.onload =
+        () => {
 
-      console.warn(
-        `Imagem não encontrada: ${image}`
-      );
+          layer.style.backgroundImage =
+            `url("${escapeCssUrl(image)}")`;
 
+          resolve();
 
-      layer.style.backgroundImage =
-        "none";
-
-    };
+        };
 
 
-  img.src =
-    image;
+      img.onerror =
+        () => {
+
+          console.warn(
+            `Imagem não encontrada: ${image}`
+          );
+
+
+          layer.style.backgroundImage =
+            "none";
+
+
+          resolve();
+
+        };
+
+
+      img.src =
+        image;
+
+    }
+  );
+
 }
 
 
 /* =========================================================
-   ESCAPAR URL
+   UTILITÁRIOS
    ========================================================= */
 
 function escapeCssUrl(
@@ -2753,10 +2628,6 @@ function escapeCssUrl(
 
 }
 
-
-/* =========================================================
-   CLAMP
-   ========================================================= */
 
 function clamp(
   value,
@@ -2883,118 +2754,98 @@ function escapeHtml(
 
 }
 
-/* =========================================================
-   ÁUDIO
-   ========================================================= */
-
 
 /* =========================================================
    ÁUDIO
    ========================================================= */
 
-
-function playAudio(src) {
+function playAudio(
+  src
+) {
 
   if (!src) {
+
     return;
+
   }
 
-  /*
-   * Se já existe um áudio tocando,
-   * encerra antes de iniciar outro.
-   */
 
   if (audioPlayer) {
 
     audioPlayer.pause();
 
-    audioPlayer.currentTime = 0;
+    audioPlayer.currentTime =
+      0;
 
-    audioPlayer = null;
+    audioPlayer =
+      null;
+
   }
 
 
   const player =
-    new Audio(`audio/${src}`);
+    new Audio(
+      `audio/${src}`
+    );
 
 
-  player.loop = true;
+  player.loop =
+    true;
 
-  audioPlayer = player;
 
+  audioPlayer =
+    player;
 
-  /*
-   * IMPORTANTE:
-   *
-   * audioUnlocked só vira true DEPOIS
-   * que o navegador aceitar o play().
-   */
 
   player.play()
 
-    .then(() => {
+    .then(
+      () => {
 
-      audioUnlocked = true;
+      }
+    )
 
-      console.log(
-        "Áudio iniciado:",
-        src
-      );
+    .catch(
+      error => {
 
-
-      /*if (audioToggle) {
-
-        audioToggle.textContent = "🔊";
-
-        audioToggle.classList.add(
-          "hidden"
+        console.warn(
+          "Não foi possível iniciar o áudio:",
+          error
         );
 
-      }*/
+      }
+    );
 
-    })
-
-    .catch(error => {
-
-      console.warn(
-        "Não foi possível iniciar o áudio:",
-        error
-      );
-
-
-      /*
-       * O navegador não autorizou.
-       * Portanto continua bloqueado.
-       */
-
-      audioUnlocked = false;
-
-    });
 }
 
 
-/* ---------------------------------------------------------
+/* =========================================================
    PARAR ÁUDIO
-   --------------------------------------------------------- */
+   ========================================================= */
 
 function stopAudio() {
 
   if (!audioPlayer) {
+
     return;
+
   }
 
 
   audioPlayer.pause();
 
-  audioPlayer.currentTime = 0;
+  audioPlayer.currentTime =
+    0;
 
-  audioPlayer = null;
+  audioPlayer =
+    null;
+
 }
 
 
-/* ---------------------------------------------------------
-   BOTÃO
-   --------------------------------------------------------- */
+/* =========================================================
+   BOTÃO DE ÁUDIO
+   ========================================================= */
 
 if (audioToggle) {
 
@@ -3002,16 +2853,50 @@ if (audioToggle) {
     "click",
     () => {
 
-      const scene =
-        scenes[currentSceneIndex];
+      audioEnabled =
+        !audioEnabled;
+
+      localStorage.setItem(
+        "audioEnabled",
+        String(audioEnabled)
+      );
+
+      updateAudioButton();
 
 
       /*
-       * O play() acontece diretamente
-       * dentro do evento de clique.
-       */
+        🔇 DESLIGADO
+      */
 
-      if (scene && scene.audio) {
+      if (!audioEnabled) {
+
+        stopAudio();
+
+        return;
+
+      }
+
+
+      /*
+        🔊 LIGADO
+
+        O clique do usuário serve como
+        interação que pode liberar
+        a reprodução de áudio.
+      */
+
+
+      const scene =
+        scenes[
+          currentSceneIndex
+        ];
+
+
+      if (
+        scene &&
+        scene.audio &&
+        audioEnabled
+      ) {
 
         playAudio(
           scene.audio
@@ -3019,20 +2904,34 @@ if (audioToggle) {
 
       }
 
-      else {
-
-        audioUnlocked = true;
-
-        /*audioToggle.textContent =
-          "🔊";
-
-        audioToggle.classList.add(
-          "hidden"
-        );*/
-
-      }
-
     }
+  );
+
+}
+
+function updateAudioButton() {
+
+  if (!audioToggle) {
+    return;
+  }
+
+  audioToggle.textContent =
+    audioEnabled
+      ? "🔊"
+      : "🔇";
+
+  audioToggle.setAttribute(
+    "aria-label",
+    audioEnabled
+      ? "Desativar áudio"
+      : "Ativar áudio"
+  );
+
+  audioToggle.setAttribute(
+    "title",
+    audioEnabled
+      ? "Desativar áudio"
+      : "Ativar áudio"
   );
 
 }
