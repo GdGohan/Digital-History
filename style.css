@@ -1,0 +1,1004 @@
+/* =========================================================
+   História Digital - ANT & JP — ESTILO
+   ========================================================= */
+
+:root {
+
+  /*
+    Largura máxima da caixa de texto.
+  */
+  --content-width: 800px;
+
+
+  /*
+    A caixa nunca encosta nas bordas.
+
+    10vw = 10% da largura da tela.
+  */
+  --side-margin: 10vw;
+
+
+  /*
+    Fundo branco semitransparente.
+  */
+  --box-bg:
+    rgba(
+      255,
+      255,
+      255,
+      0.82
+    );
+
+
+  /*
+    Borda quase invisível.
+  */
+  --box-border:
+    rgba(
+      255,
+      255,
+      255,
+      0.55
+    );
+
+
+  /*
+    Cor do texto.
+  */
+  --text-color:
+    #111;
+
+
+  /*
+    Arredondamento.
+  */
+  --box-radius:
+    4px;
+
+
+  /*
+    Espaçamento interno.
+  */
+  --box-padding:
+    clamp(
+      1.25rem,
+      3vw,
+      2.5rem
+    );
+
+
+  /*
+    Escurecimento sobre as imagens.
+  */
+  --background-darkness:
+    0.12;
+
+}
+
+#audio-toggle {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1000;
+
+  padding: 10px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 20px;
+
+  background: rgba(255, 255, 255, 0.85);
+  color: #111;
+
+  font-size: 14px;
+  cursor: pointer;
+
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+#audio-toggle.hidden {
+  display: none;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* =========================================================
+   BOTÃO VOLTAR
+   ========================================================= */
+
+#btn-voltar {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 1000;
+
+  padding: 10px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 20px;
+
+  background: rgba(255, 255, 255, 0.85);
+  color: #111;
+
+  font-size: 14px;
+  cursor: pointer;
+
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* =========================================================
+   MENU DE HISTÓRIAS
+   ========================================================= */
+
+#menu-historias,
+#menu-capitulos {
+  position: relative;
+  z-index: 2;
+
+  min-height: 100vh;
+  padding: 8vh 6vw;
+}
+
+#menu-historias h1,
+#menu-capitulos h1 {
+  text-align: center;
+  font-weight: normal;
+  color: #fff;
+  margin: 0 0 3rem;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+}
+
+.btn-voltar-inline {
+  display: inline-block;
+  margin-bottom: 1.5rem;
+
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 20px;
+
+  background: transparent;
+  color: #fff;
+
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-voltar-inline:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.historias-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1.5rem;
+
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.historia-card {
+  all: unset;
+  box-sizing: border-box;
+
+  position: relative;
+  display: block;
+  cursor: pointer;
+
+  aspect-ratio: 2 / 3;
+  width: 100%;
+
+  border-radius: var(--box-radius);
+  overflow: hidden;
+
+  background-color: #1c1c1c;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+.historia-card:hover,
+.historia-card:focus-visible {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+}
+
+.historia-titulo {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  padding: 1rem 0.9rem 0.8rem;
+
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.85),
+    rgba(0, 0, 0, 0)
+  );
+
+  color: #fff;
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+.historia-progresso {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+
+  padding: 3px 10px;
+  border-radius: 10px;
+
+  background: rgba(255, 255, 255, 0.9);
+  color: #111;
+
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* =========================================================
+   RESET
+   ========================================================= */
+
+* {
+
+  box-sizing:
+    border-box;
+
+}
+
+
+html {
+
+  scroll-behavior:
+    smooth;
+
+  background:
+    #111;
+
+}
+
+
+body {
+
+  margin:
+    0;
+
+  min-height:
+    100vh;
+
+  background:
+    #111;
+
+  color:
+    var(--text-color);
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  overflow-x:
+    hidden;
+
+}
+
+
+/* =========================================================
+   BACKGROUND
+   ========================================================= */
+
+#background-stage {
+
+  position:
+    fixed;
+
+  inset:
+    0;
+
+  z-index:
+    0;
+
+  overflow:
+    hidden;
+
+  pointer-events:
+    none;
+
+  background:
+    #111;
+
+}
+
+
+/* =========================================================
+   CAMADAS DAS IMAGENS
+   ========================================================= */
+
+.background-layer {
+
+  position:
+    absolute;
+
+  inset:
+    0;
+
+
+  /*
+    A imagem preenche toda a tela.
+  */
+
+  background-position:
+    center;
+
+  background-repeat:
+    no-repeat;
+
+  background-size:
+    cover;
+
+
+  /*
+    Estado inicial.
+  */
+
+  opacity:
+    0;
+
+
+  /*
+    MUITO IMPORTANTE:
+
+    O JavaScript controla diretamente
+    opacity e blur.
+
+    Portanto NÃO colocamos transition
+    aqui.
+
+  */
+
+  transition:
+    none;
+
+
+  /*
+    Evita pequenas bordas durante o blur.
+  */
+
+  transform:
+    scale(1.03);
+
+
+  /*
+    Otimização para alterações contínuas.
+  */
+
+  will-change:
+    opacity,
+    filter;
+
+}
+
+
+/* =========================================================
+   ESCURECIMENTO
+   ========================================================= */
+
+#background-stage::after {
+
+  content:
+    "";
+
+  position:
+    absolute;
+
+  inset:
+    0;
+
+  background:
+    rgba(
+      0,
+      0,
+      0,
+      var(--background-darkness)
+    );
+
+  pointer-events:
+    none;
+
+}
+
+
+/* =========================================================
+   FAIXA DE BLUR NO TOPO
+   ========================================================= */
+
+#transition-blur {
+
+  position:
+    absolute;
+
+  left:
+    0;
+
+  right:
+    0;
+
+  top:
+    0;
+
+
+  /*
+    Área vertical do efeito.
+  */
+
+  height:
+    34vh;
+
+
+  opacity:
+    0;
+
+
+  pointer-events:
+    none;
+
+
+  /*
+    Gradiente visual da transição.
+  */
+
+  background:
+    linear-gradient(
+      to bottom,
+
+      rgba(
+        255,
+        255,
+        255,
+        0.16
+      ),
+
+      rgba(
+        255,
+        255,
+        255,
+        0.07
+      )
+      35%,
+
+      rgba(
+        255,
+        255,
+        255,
+        0
+      )
+    );
+
+
+  /*
+    Blur real do conteúdo atrás da faixa.
+  */
+
+  backdrop-filter:
+    blur(10px);
+
+  -webkit-backdrop-filter:
+    blur(10px);
+
+
+  /*
+    A faixa desaparece gradualmente.
+  */
+
+  mask-image:
+    linear-gradient(
+      to bottom,
+
+      black
+      0%,
+
+      rgba(
+        0,
+        0,
+        0,
+        0.75
+      )
+      45%,
+
+      transparent
+      100%
+    );
+
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+
+      black
+      0%,
+
+      rgba(
+        0,
+        0,
+        0,
+        0.75
+      )
+      45%,
+
+      transparent
+      100%
+    );
+
+
+  /*
+    O JS controla a opacidade.
+  */
+
+  transition:
+    opacity 80ms linear;
+
+}
+
+
+/* =========================================================
+   HISTÓRIA
+   ========================================================= */
+
+#story {
+
+  position:
+    relative;
+
+  z-index:
+    2;
+
+  width:
+    100%;
+
+}
+
+
+/* =========================================================
+   CADA CENA / PARÁGRAFO
+   ========================================================= */
+
+.scene {
+
+  position:
+    relative;
+
+
+  /*
+    Cada parágrafo possui pelo menos
+    uma tela inteira de espaço.
+
+    Isso permite que o scroll controle
+    a imagem suavemente.
+  */
+
+  min-height:
+    100vh;
+
+
+  /*
+    Espaço superior e inferior.
+  */
+
+  padding-top:
+    12vh;
+
+  padding-bottom:
+    18vh;
+
+
+  /*
+    Margem lateral mínima de 10%.
+  */
+
+  padding-left:
+    max(
+      10vw,
+      24px
+    );
+
+  padding-right:
+    max(
+      10vw,
+      24px
+    );
+
+
+  /*
+    Centralização da caixa.
+  */
+
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+}
+
+
+/* =========================================================
+   CONTAINER
+   ========================================================= */
+
+.scene-inner {
+
+  width:
+    min(
+      var(--content-width),
+
+      calc(
+        100vw -
+        (
+          2 *
+          max(
+            10vw,
+            24px
+          )
+        )
+      )
+    );
+
+
+  margin:
+    0 auto;
+
+}
+
+
+/* =========================================================
+   CAIXA BRANCA
+   ========================================================= */
+
+.text-box {
+
+  width:
+    100%;
+
+
+  padding:
+    var(--box-padding);
+
+
+  /*
+    Branco translúcido.
+  */
+
+  background:
+    var(--box-bg);
+
+
+  border:
+    1px solid
+    var(--box-border);
+
+
+  border-radius:
+    var(--box-radius);
+
+
+  /*
+    Sombra.
+  */
+
+  box-shadow:
+    0
+    10px
+    40px
+    rgba(
+      0,
+      0,
+      0,
+      0.15
+    );
+
+
+  /*
+    Pequeno desfoque somente atrás
+    da caixa, deixando o texto limpo.
+  */
+
+  backdrop-filter:
+    blur(3px);
+
+  -webkit-backdrop-filter:
+    blur(3px);
+
+
+  color:
+    var(--text-color);
+
+
+  /*
+    Entrada inicial do texto.
+  */
+
+  opacity:
+    0;
+
+  transform:
+    translateY(22px);
+
+
+  transition:
+    opacity
+    700ms
+    ease,
+
+    transform
+    700ms
+    ease;
+
+}
+
+
+/* =========================================================
+   TEXTO VISÍVEL
+   ========================================================= */
+
+.scene.is-visible
+.text-box {
+
+  opacity:
+    1;
+
+  transform:
+    translateY(0);
+
+}
+
+
+/* =========================================================
+   PARÁGRAFO
+   ========================================================= */
+
+.text-box p {
+
+  margin:
+    0;
+
+
+  font-size:
+    clamp(
+      1.05rem,
+      1.35vw,
+      1.28rem
+    );
+
+
+  line-height:
+    1.85;
+
+
+  letter-spacing:
+    0.01em;
+
+}
+
+
+/* =========================================================
+   TÍTULO
+   ========================================================= */
+
+.chapter-title {
+
+  margin:
+    0 0 1.2rem;
+
+
+  font-size:
+    clamp(
+      1.8rem,
+      4vw,
+      3rem
+    );
+
+
+  line-height:
+    1.1;
+
+
+  font-weight:
+    normal;
+
+}
+
+
+/* =========================================================
+   SUBTÍTULO
+   ========================================================= */
+
+.chapter-subtitle {
+
+  margin:
+    0 0 1.5rem;
+
+
+  font-size:
+    1rem;
+
+
+  opacity:
+    0.7;
+
+}
+
+
+/* =========================================================
+   CARREGAMENTO
+   ========================================================= */
+
+.status {
+
+  min-height:
+    100vh;
+
+
+  display:
+    grid;
+
+  place-items:
+    center;
+
+
+  padding:
+    2rem;
+
+
+  color:
+    white;
+
+
+  text-align:
+    center;
+
+
+  font-family:
+    system-ui,
+    sans-serif;
+
+}
+
+
+/* =========================================================
+   ERRO
+   ========================================================= */
+
+.error {
+
+  max-width:
+    700px;
+
+  margin:
+    auto;
+
+  line-height:
+    1.6;
+
+}
+
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (
+  max-width: 600px
+) {
+
+  :root {
+
+    --box-padding:
+      1.2rem;
+
+  }
+
+
+  .scene {
+
+    padding-top:
+      10vh;
+
+    padding-bottom:
+      14vh;
+
+
+    padding-left:
+      max(
+        10vw,
+        18px
+      );
+
+    padding-right:
+      max(
+        10vw,
+        18px
+      );
+
+  }
+
+
+  .scene-inner {
+
+    width:
+      calc(
+        100vw -
+        (
+          2 *
+          max(
+            10vw,
+            18px
+          )
+        )
+      );
+
+  }
+
+
+  .text-box p {
+
+    font-size:
+      1rem;
+
+    line-height:
+      1.75;
+
+  }
+
+
+  #transition-blur {
+
+    height:
+      28vh;
+
+  }
+
+}
+
+
+/* =========================================================
+   REDUÇÃO DE MOVIMENTO
+   ========================================================= */
+
+@media (
+  prefers-reduced-motion: reduce
+) {
+
+  html {
+
+    scroll-behavior:
+      auto;
+
+  }
+
+
+  .text-box {
+
+    transition:
+      none;
+
+  }
+
+
+  #transition-blur {
+
+    transition:
+      none;
+
+  }
+
+}

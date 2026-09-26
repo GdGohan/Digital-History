@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="História Digital - ANT & JP — experiência narrativa HTML5.">
+  <title>História Digital - ANT & JP</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!--
+    O catálogo de histórias vem de texto/historias.ini.
+    O conteúdo de cada história vem de texto/<arquivo>.txt,
+    carregado pelo script.js (ver CONFIG.textFile).
+  -->
+
+  <main id="menu-historias" aria-live="polite">
+    <h1>Escolha uma história</h1>
+    <div id="lista-historias" class="status">Carregando histórias...</div>
+  </main>
+
+  <main id="menu-capitulos" class="hidden" aria-live="polite">
+    <button id="btn-voltar-capitulos" type="button" class="btn-voltar-inline">
+      ← Histórias
+    </button>
+    <h1 id="titulo-historia-atual"></h1>
+    <div id="lista-capitulos" class="historias-grid"></div>
+  </main>
+
+  <main id="story" class="hidden" aria-live="polite">
+    <div id="loading" class="status">Carregando história...</div>
+  </main>
+
+  <button id="btn-voltar" type="button" class="hidden">
+    ← Voltar
+  </button>
+
+  <button id="audio-toggle" type="button" class="hidden">
+    🔊
+  </button>
+
+  <noscript>
+    <div class="noscript">
+      Este site precisa de JavaScript ativado para carregar as histórias.
+    </div>
+  </noscript>
+
+  <script src="script.js"></script>
+
+</body>
+</html>
