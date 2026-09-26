@@ -1,0 +1,29 @@
+{
+  "historias": [
+    {
+      "id": "teresa",
+      "titulo": "Teresa Morgana de Ipanema",
+      "capa": "teresa_cover.jpg",
+      "inicio": 0,
+      "capitulos": [
+        {
+          "id": "prologo",
+          "titulo": "Prólogo",
+          "arquivo": "teresa.txt"
+        },
+        {
+          "id": "spinoff",
+          "numero": -1,
+          "titulo": "Spin-off: Under maintenance",
+          "capa": "lorem_ipsum.jpg",
+          "arquivo": "spinoff.txt"
+        },
+        {
+          "id": "ep1",
+          "titulo": "Vida Serena, nada plena",
+          "arquivo": "teresa_1.txt"
+        }
+      ]
+    }
+  ]
+}

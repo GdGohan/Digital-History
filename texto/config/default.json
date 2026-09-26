@@ -1,0 +1,8 @@
+{
+  "personagens": {
+    "Teresa": {
+      "imagem": "praia.png",
+      "transicao": "blur"
+    }
+  }
+}
