@@ -42,6 +42,9 @@ const CONFIG = {
   */
 
   catalogFile:
+    "historias.db",
+
+  legacyCatalogFile:
     "texto/config/historias.json",
 
   defaultsFile:
@@ -124,6 +127,11 @@ let catalog = [];
 let currentHistoria = null;
 
 let currentCapitulo = null;
+
+let currentParte = null;
+
+/* Personagens vindos do historias.db (null = usar default.json) */
+let dbPersonagens = null;
 
 let visibilityObserver = null;
 
@@ -227,7 +235,7 @@ function renderMenu(entries) {
       "status";
 
     listaHistorias.textContent =
-      "Nenhuma história encontrada em texto/config/historias.json.";
+      "Nenhuma história encontrada.";
 
     return;
 
@@ -323,6 +331,39 @@ function renderMenu(entries) {
 
 function abrirHistoria(historia) {
 
+  currentParte =
+    null;
+
+
+  /*
+    História com partes:
+    mostra primeiro as partes (ex.: Ant, JP, Juntos).
+  */
+
+  if (
+    historia.partes.length > 0
+  ) {
+
+    currentHistoria =
+      historia;
+
+    menuHistorias.classList.add(
+      "hidden"
+    );
+
+    menuCapitulos.classList.remove(
+      "hidden"
+    );
+
+    renderPartes(
+      historia
+    );
+
+    return;
+
+  }
+
+
   /*
     História com somente um capítulo:
     abre diretamente.
@@ -363,13 +404,147 @@ function abrirHistoria(historia) {
 
 
 /* =========================================================
-   RENDERIZAR CAPÍTULOS
+   TELA DE PARTES
    ========================================================= */
 
-function renderCapitulos(historia) {
+function renderPartes(historia) {
 
   tituloHistoriaAtual.textContent =
     historia.titulo;
+
+  listaCapitulos.innerHTML =
+    "";
+
+
+  for (const parte of historia.partes) {
+
+    const card =
+      document.createElement(
+        "button"
+      );
+
+    card.type =
+      "button";
+
+    card.className =
+      "historia-card";
+
+
+    /*
+      Capa da parte; se não tiver,
+      usa a capa da história.
+    */
+
+    const capa =
+      normalizeAssetPath(
+        parte.capa ||
+        historia.capa,
+        "imagens/capas"
+      );
+
+    card.style.backgroundImage =
+      capa
+        ? `url("${escapeCssUrl(capa)}")`
+        : "none";
+
+
+    const titulo =
+      document.createElement(
+        "span"
+      );
+
+    titulo.className =
+      "historia-titulo";
+
+    titulo.textContent =
+      parte.titulo;
+
+    card.appendChild(
+      titulo
+    );
+
+
+    if (
+      historiaTemProgresso(parte)
+    ) {
+
+      const badge =
+        document.createElement(
+          "span"
+        );
+
+      badge.className =
+        "historia-progresso";
+
+      badge.textContent =
+        "Continuar";
+
+      card.appendChild(
+        badge
+      );
+
+    }
+
+
+    card.addEventListener(
+      "click",
+      () => abrirParte(
+        historia,
+        parte
+      )
+    );
+
+
+    listaCapitulos.appendChild(
+      card
+    );
+
+  }
+
+}
+
+
+function abrirParte(
+  historia,
+  parte
+) {
+
+  currentHistoria =
+    historia;
+
+  currentParte =
+    parte;
+
+  renderCapitulos(
+    historia,
+    parte
+  );
+
+}
+
+
+/* =========================================================
+   RENDERIZAR CAPÍTULOS
+   ========================================================= */
+
+function renderCapitulos(
+  historia,
+  parte = null
+) {
+
+  /*
+    Se "parte" for informada, lista só os capítulos dela.
+    Sem "parte", lista os capítulos da história inteira.
+  */
+
+  const fonte =
+    parte || historia;
+
+
+  tituloHistoriaAtual.textContent =
+    parte
+      ? `${historia.titulo} — ${parte.titulo}`
+      : historia.titulo;
 
   listaCapitulos.innerHTML =
     "";
@@ -390,13 +565,13 @@ function renderCapitulos(historia) {
 
   let contador =
     Number.isFinite(
-      Number(historia.inicio)
+      Number(fonte.inicio)
     )
-      ? Number(historia.inicio)
+      ? Number(fonte.inicio)
       : 1;
 
 
-  historia.capitulos.forEach(
+  fonte.capitulos.forEach(
     capitulo => {
 
       let numeroExibido;
@@ -478,6 +653,7 @@ function renderCapitulos(historia) {
       const capa =
         normalizeAssetPath(
           capitulo.capa ||
+          (parte && parte.capa) ||
           historia.capa,
           "imagens/capas"
         );
@@ -576,7 +752,32 @@ if (btnVoltarCapitulos) {
     "click",
     () => {
 
+      /*
+        Dentro de uma parte:
+        volta para a lista de partes.
+      */
+
+      if (
+        currentParte &&
+        currentHistoria
+      ) {
+
+        currentParte =
+          null;
+
+        renderPartes(
+          currentHistoria
+        );
+
+        return;
+
+      }
+
+
       currentHistoria =
+        null;
+
+      currentParte =
         null;
 
 
@@ -636,13 +837,29 @@ async function loadCatalog() {
 
   try {
 
-    const response =
+    let response =
       await fetch(
         CONFIG.catalogFile,
         {
           cache: "no-cache"
         }
       );
+
+    let usandoDb = true;
+
+    if (!response.ok) {
+
+      usandoDb = false;
+
+      response =
+        await fetch(
+          CONFIG.legacyCatalogFile,
+          {
+            cache: "no-cache"
+          }
+        );
+
+    }
 
 
     if (!response.ok) {
@@ -697,6 +914,13 @@ async function loadCatalog() {
     }
 
 
+    dbPersonagens =
+      usandoDb &&
+      data.personagens &&
+      typeof data.personagens === "object"
+        ? data.personagens
+        : null;
+
     return normalizarCatalogo(
       data.historias
     );
@@ -724,6 +948,45 @@ async function loadCatalog() {
    quando um campo for omitido.
    ========================================================= */
 
+function normalizarInicio(valor) {
+
+  return Number.isFinite(
+    Number(valor)
+  )
+    ? Number(valor)
+    : 1;
+
+}
+
+
+function normalizarCapitulo(capitulo) {
+
+  return {
+    id:
+      capitulo.id || "",
+    numero:
+      capitulo.numero !== undefined
+        ? capitulo.numero
+        : null,
+    titulo:
+      capitulo.titulo ||
+      capitulo.id ||
+      "Capítulo sem título",
+    capa:
+      capitulo.capa || "",
+    arquivo:
+      capitulo.arquivo ||
+      capitulo.id ||
+      "",
+    texto:
+      typeof capitulo.texto === "string"
+        ? capitulo.texto
+        : ""
+  };
+
+}
+
+
 function normalizarCatalogo(
   historias
 ) {
@@ -731,64 +994,75 @@ function normalizarCatalogo(
   return historias.map(
     historia => {
 
-      return {
+      /*
+        PARTES (opcional).
 
+        Uma história pode ter "partes", cada uma com
+        seus próprios capítulos. Sem "partes", a história
+        funciona exatamente como antes.
+      */
+
+      const partes =
+        Array.isArray(historia.partes)
+          ? historia.partes.map(
+              parte => ({
+                id:
+                  parte.id || "",
+                titulo:
+                  parte.titulo ||
+                  parte.id ||
+                  "Parte sem título",
+                capa:
+                  parte.capa || "",
+                inicio:
+                  normalizarInicio(
+                    parte.inicio
+                  ),
+                capitulos:
+                  Array.isArray(parte.capitulos)
+                    ? parte.capitulos.map(
+                        normalizarCapitulo
+                      )
+                    : []
+              })
+            )
+          : [];
+
+
+      /*
+        Com partes, "capitulos" vira a lista de todos
+        os capítulos juntos (usada para progresso, título etc).
+      */
+
+      const capitulos =
+        partes.length > 0
+          ? partes.flatMap(
+              parte => parte.capitulos
+            )
+          : (
+              Array.isArray(historia.capitulos)
+                ? historia.capitulos.map(
+                    normalizarCapitulo
+                  )
+                : []
+            );
+
+
+      return {
         id:
           historia.id || "",
-
         titulo:
           historia.titulo ||
           historia.id ||
           "História sem título",
-
         capa:
-          historia.capa ||
-          "",
-
+          historia.capa || "",
         inicio:
-          Number.isFinite(
-            Number(historia.inicio)
-          )
-            ? Number(historia.inicio)
-            : 1,
-
-        capitulos:
-          Array.isArray(
-            historia.capitulos
-          )
-            ? historia.capitulos.map(
-                capitulo => {
-
-                  return {
-
-                    id:
-                      capitulo.id ||
-                      "",
-
-                    numero:
-                      capitulo.numero !== undefined
-                        ? capitulo.numero
-                        : null,
-
-                    titulo:
-                      capitulo.titulo ||
-                      capitulo.id ||
-                      "Capítulo sem título",
-
-                    capa:
-                      capitulo.capa ||
-                      "",
-
-                    arquivo:
-                      capitulo.arquivo ||
-                      ""
-
-                  };
-
-                }
-              )
-            : []
-
+          normalizarInicio(
+            historia.inicio
+          ),
+        partes,
+        capitulos
       };
 
     }
@@ -909,15 +1183,35 @@ function closeStory() {
     null;
 
 
+  const temPartes =
+    historia &&
+    historia.partes.length > 0;
+
   if (
     historia &&
-    historia.capitulos.length > 1
+    (temPartes || historia.capitulos.length > 1)
   ) {
 
-    renderCapitulos(
-      historia
-    );
+    /*
+      História com partes:
+      se nenhuma parte estava aberta, volta para as partes;
+      senão, volta para os capítulos da parte atual.
+    */
 
+    if (temPartes && !currentParte) {
+
+      renderPartes(historia);
+
+    }
+
+    else {
+
+      renderCapitulos(
+        historia,
+        currentParte
+      );
+
+    }
 
     menuCapitulos.classList.remove(
       "hidden"
@@ -930,11 +1224,12 @@ function closeStory() {
     currentHistoria =
       null;
 
+    currentParte =
+      null;
 
     menuHistorias.classList.remove(
       "hidden"
     );
-
 
     renderMenu(
       catalog
@@ -1134,26 +1429,43 @@ async function resumeProgress(
 
 async function loadStory() {
 
-  const response =
-    await fetch(
-      CONFIG.textFile,
-      {
-        cache: "no-cache"
-      }
-    );
+  let text;
 
+  /*
+    historias.db: o texto do capítulo já vem embutido.
+    Formato antigo: busca texto/<arquivo>.txt.
+  */
 
-  if (!response.ok) {
+  if (
+    currentCapitulo &&
+    currentCapitulo.texto
+  ) {
 
-    throw new Error(
-      `Não foi possível carregar ${CONFIG.textFile} (${response.status}).`
-    );
+    text =
+      currentCapitulo.texto;
 
   }
 
+  else {
 
-  const text =
-    await response.text();
+    const response =
+      await fetch(
+        CONFIG.textFile,
+        {
+          cache: "no-cache"
+        }
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        `Não foi possível carregar ${CONFIG.textFile} (${response.status}).`
+      );
+    }
+
+    text =
+      await response.text();
+
+  }
 
 
   const defaults =
@@ -1221,6 +1533,15 @@ async function loadStory() {
    ========================================================= */
 
 async function loadDefaults() {
+
+  if (dbPersonagens) {
+
+    return {
+      personagens:
+        dbPersonagens
+    };
+
+  }
 
   try {
 

@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editor — História Digital</title>
+<style>
+:root{--bg:#14161c;--card:#1d2029;--line:#2d3140;--tx:#e8e9ee;--mut:#9aa0b2;--ac:#6ea8fe;--dg:#e5636b}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);padding:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+button,select,input,textarea{font:inherit;color:inherit}
+button{background:#2a2f3f;border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}
+button.pri{background:var(--ac);color:#0b1020;border-color:var(--ac);font-weight:600}
+button.dg{color:var(--dg)}
+button.sm{padding:4px 9px;font-size:14px}
+button.on{outline:2px solid var(--ac)}
+input,select,textarea{background:#11131a;border:1px solid var(--line);border-radius:8px;padding:8px;width:100%}
+textarea{min-height:55vh;resize:vertical;line-height:1.5}
+label{display:block;font-size:13px;color:var(--mut);margin:8px 0 2px}
+nav{display:flex;gap:6px;padding:8px}
+nav button{flex:1}
+main{padding:0 8px 80px;max-width:900px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin:10px 0}
+.card .card{background:#181b24;margin:8px 0 8px 10px}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:4px 0}
+.row>.grow{flex:1;min-width:120px}
+.row>.num{width:80px}
+.chap{display:flex;gap:6px;align-items:center;margin:4px 0}
+.chap .t{flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mut{color:var(--mut);font-size:13px}
+.hide{display:none}
+#status{margin-left:auto;font-size:13px;color:var(--mut)}
+#status.dirty{color:#f0c36d}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+#modal.hide{display:none}
+#modal .box{background:var(--card);border:1px solid var(--line);border-radius:14px 14px 0 0;padding:14px;width:100%;max-width:700px;max-height:92vh;overflow:auto}
+#modal h3{margin:0 0 6px;font-size:17px}
+#modal textarea{min-height:35vh;font-size:13px;font-family:ui-monospace,monospace}
+#modal .row{margin-top:10px;justify-content:flex-end}
+</style>
+</head>
+<body>
+
+<header>
+  <button id="btnAbrir">Abrir .db</button>
+  <button id="btnNovo">Novo</button>
+  <button id="btnSalvar" class="pri">Salvar .db</button>
+  <button id="btnSalvarComo">Salvar como…</button>
+  <button id="btnTexto" title="Copiar ou colar o conteúdo do .db">Texto…</button>
+  <span id="status">Sem arquivo</span>
+</header>
+
+<nav>
+  <button data-a="tab" data-tab="estrutura" class="on">Estrutura</button>
+  <button data-a="tab" data-tab="capitulo">Capítulo</button>
+  <button data-a="tab" data-tab="personagens">Personagens</button>
+</nav>
+
+<main>
+  <section id="tab-estrutura">
+    <div id="tree"></div>
+    <button data-a="addH">+ Nova história</button>
+    <p class="mut">Capas, imagens e áudios: use só o nome do arquivo (ex.: teresa_cover.jpg). Os arquivos em si continuam nas pastas do site.</p>
+  </section>
+
+  <section id="tab-capitulo" class="hide">
+    <div id="chapBox"></div>
+  </section>
+
+  <section id="tab-personagens" class="hide">
+    <p class="mut">Imagem e transição padrão de cada personagem (usadas quando a história troca de personagem).</p>
+    <div id="persBox"></div>
+    <button data-a="addPers">+ Personagem</button>
+  </section>
+</main>
+
+<input type="file" id="fileDb" class="hide">
+<input type="file" id="fileImp" class="hide" multiple>
+
+<div id="modal" class="hide"><div class="box">
+  <h3 id="mTitulo"></h3>
+  <p id="mTexto" class="mut"></p>
+  <input id="mInput" class="hide">
+  <textarea id="mArea" class="hide" spellcheck="false"></textarea>
+  <div class="row" id="mBtns"></div>
+</div></div>
+
+<script>
+/*PURE-START*/
+function slug(s){
+  return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
+}
+
+function parseHeader(texto){
+  const lines = String(texto||"").replace(/^\uFEFF/,"").replace(/\r\n?/g,"\n").split("\n");
+  const h = {personagem:"",titulo:"",subtitulo:""};
+  const seen = {};
+  let i = 0;
+  for(; i < lines.length; i++){
+    const l = lines[i].trim();
+    if(!l) continue;
+    const m = l.match(/^\[(personagem|titulo|subtitulo)=(.*)\]$/i);
+    if(!m) break;
+    const k = m[1].toLowerCase();
+    if(seen[k]) break;
+    seen[k] = true;
+    h[k] = m[2].trim();
+  }
+  h.corpo = lines.slice(i).join("\n").replace(/\s+$/,"");
+  return h;
+}
+
+function buildText(h){
+  const out = [];
+  if(h.personagem) out.push("[personagem="+h.personagem+"]","");
+  if(h.titulo) out.push("[titulo="+h.titulo+"]");
+  if(h.subtitulo) out.push("[subtitulo="+h.subtitulo+"]");
+  if(h.titulo || h.subtitulo) out.push("");
+  out.push(h.corpo || "");
+  return out.join("\n");
+}
+
+async function readZipEntry(buf, wanted){
+  const u8 = new Uint8Array(buf);
+  const dv = new DataView(buf);
+  let eocd = -1;
+  for(let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--){
+    if(dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; }
+  }
+  if(eocd < 0) throw new Error("Este arquivo não parece ser um .docx válido.");
+  const total = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const dec = new TextDecoder();
+  for(let n = 0; n < total; n++){
+    if(dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true);
+    const csize  = dv.getUint32(p + 20, true);
+    const nlen   = dv.getUint16(p + 28, true);
+    const elen   = dv.getUint16(p + 30, true);
+    const clen   = dv.getUint16(p + 32, true);
+    const lho    = dv.getUint32(p + 42, true);
+    const name   = dec.decode(u8.subarray(p + 46, p + 46 + nlen));
+    if(name === wanted){
+      const lnlen = dv.getUint16(lho + 26, true);
+      const lelen = dv.getUint16(lho + 28, true);
+      const start = lho + 30 + lnlen + lelen;
+      const data  = u8.subarray(start, start + csize);
+      if(method === 0) return data;
+      if(method === 8){
+        if(typeof DecompressionStream === "undefined")
+          throw new Error("Este navegador não abre .docx. Salve como .txt ou cole o texto.");
+        const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+      }
+      throw new Error("Compressão do .docx não suportada.");
+    }
+    p += 46 + nlen + elen + clen;
+  }
+  return null;
+}
+
+function unxml(s){
+  return s.replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"')
+          .replace(/&apos;/g,"'").replace(/&amp;/g,"&");
+}
+
+async function docxToText(buf){
+  const u8 = new Uint8Array(buf);
+  if(u8[0] === 0xD0 && u8[1] === 0xCF)
+    throw new Error(".doc antigo não é suportado. Abra no Word ou Google Docs e salve como .docx (ou .txt).");
+  const xml = await readZipEntry(buf, "word/document.xml");
+  if(!xml) throw new Error("Não encontrei o texto dentro do .docx.");
+  const s = new TextDecoder().decode(xml);
+  const paras = [];
+  const reP = /<w:p[ >][\s\S]*?<\/w:p>/g;
+  const reT = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br[^>]*\/>/g;
+  let m;
+  while((m = reP.exec(s))){
+    let t = "", x;
+    reT.lastIndex = 0;
+    while((x = reT.exec(m[0]))){
+      if(x[1] !== undefined) t += unxml(x[1]);
+      else if(x[0].indexOf("<w:tab") === 0) t += "\t";
+      else t += "\n";
+    }
+    t = t.trim();
+    if(t) paras.push(t);
+  }
+  return paras.join("\n\n");
+}
+/*PURE-END*/
+
+/* =========================================================
+   ESTADO
+   ========================================================= */
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const DRAFT = "hd-editor-rascunho";
+
+/*
+  alert/confirm/prompt não funcionam em muitos WebViews do Android
+  (o app precisa tratá-los). Aqui tudo é feito dentro da própria página.
+*/
+const UA = navigator.userAgent || "";
+const isMobile = /Android|iPhone|iPad/i.test(UA);
+const isWebView = /; wv\)/.test(UA) || (/Android/.test(UA) && /Version\/\d/.test(UA)) ||
+                  (/(iPhone|iPad)/.test(UA) && !/Safari/.test(UA));
+
+function dialogo(o, aoClicar){
+  return new Promise(res=>{
+    $("mTitulo").textContent = o.titulo || "";
+    $("mTitulo").classList.toggle("hide", !o.titulo);
+    $("mTexto").textContent = o.texto || "";
+    $("mTexto").classList.toggle("hide", !o.texto);
+    const inp = $("mInput"), area = $("mArea");
+    inp.classList.toggle("hide", o.input === undefined);
+    inp.value = o.input === undefined ? "" : o.input;
+    area.classList.toggle("hide", o.area === undefined);
+    area.value = o.area === undefined ? "" : o.area;
+    const box = $("mBtns"); box.innerHTML = "";
+    const fechar = r=>{ $("modal").classList.add("hide"); res(r); };
+    (o.botoes || [{id:"ok",rot:"OK",pri:true}]).forEach(b=>{
+      const el = document.createElement("button");
+      el.type = "button"; el.textContent = b.rot;
+      if(b.pri) el.className = "pri";
+      el.onclick = async ()=>{
+        const ctx = {id:b.id, input:inp.value, area:area.value, areaEl:area};
+        if(b.manter){ if(aoClicar) await aoClicar(b.id, ctx); return; }
+        fechar(ctx);
+      };
+      box.appendChild(el);
+    });
+    $("modal").classList.remove("hide");
+    if(o.input !== undefined) setTimeout(()=>inp.focus(), 50);
+  });
+}
+const aviso = (t, titulo)=>dialogo({titulo, texto:t});
+const confirmar = async t=>(await dialogo({texto:t, botoes:[{id:"n",rot:"Cancelar"},{id:"s",rot:"Confirmar",pri:true}]})).id === "s";
+const pedir = async t=>{
+  const r = await dialogo({texto:t, input:"", botoes:[{id:"n",rot:"Cancelar"},{id:"s",rot:"OK",pri:true}]});
+  return r.id === "s" ? r.input : null;
+};
+
+async function copiar(areaEl){
+  const txt = areaEl.value;
+  try{ if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(txt); return true; } }catch(e){}
+  try{ areaEl.focus(); areaEl.select(); areaEl.setSelectionRange(0, txt.length); return document.execCommand("copy"); }catch(e){ return false; }
+}
+
+function baixar(conteudo){
+  const blob = new Blob([conteudo], {type:"application/octet-stream"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "historias.db";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+
+/* Painel de texto: serve para COPIAR (salvar) e para COLAR (abrir), em qualquer WebView */
+async function painelTexto(titulo, texto){
+  const conteudo = JSON.stringify(serialize(), null, 2);
+  const r = await dialogo({
+    titulo: titulo || "Texto do .db",
+    texto: texto || "Copie o conteúdo para guardar, ou cole aqui o conteúdo de um .db e toque em “Abrir este texto”.",
+    area: conteudo,
+    botoes:[
+      {id:"copiar",rot:"Copiar",manter:true},
+      {id:"baixar",rot:"Baixar arquivo",manter:true},
+      {id:"abrir",rot:"Abrir este texto"},
+      {id:"fechar",rot:"Fechar",pri:true}
+    ]
+  }, async (id, ctx)=>{
+    if(id === "copiar"){
+      ctx.areaEl.value = JSON.stringify(serialize(), null, 2);
+      aviso0(await copiar(ctx.areaEl) ? "Copiado." : "Não consegui copiar. Segure o dedo na caixa, selecione tudo e copie.");
+    }
+    if(id === "baixar") baixar(JSON.stringify(serialize(), null, 2));
+  });
+  if(r.id === "abrir"){
+    try{
+      const semTexto = loadData(JSON.parse(r.area.replace(/^\uFEFF/,"")));
+      fileHandle = null; fileName = "texto colado"; setDirty(true); renderAll();
+      if(semTexto) aviso(semTexto + " capítulo(s) sem texto.");
+    }catch(err){ aviso("Texto inválido: " + err.message); }
+  }
+  if(r.id === "fechar") setDirty(dirty);
+}
+/* aviso curto que não fecha o painel de texto */
+function aviso0(msg){
+  const el = $("mTexto"); el.textContent = msg; el.classList.remove("hide");
+}
+
+let db = {historias:[]};
+let pers = [];                 // [{_n:nome, imagem, transicao}]
+let sel = {h:-1,p:-1,c:-1};
+let dirty = false;
+let fileName = "";
+let importTarget = null;       // {type:"new",h,p} | {type:"replace"}
+let fileHandle = null;         // arquivo aberto/salvo (Chrome/Edge no computador)
+
+function setDirty(v){
+  dirty = v;
+  const st = $("status");
+  st.textContent = (fileName || "Sem arquivo") + (v ? " • não salvo" : "");
+  st.className = v ? "dirty" : "";
+  if(v) scheduleDraft();
+}
+
+let draftTimer;
+function scheduleDraft(){
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(()=>{
+    try{ localStorage.setItem(DRAFT, JSON.stringify(serialize())); }catch(e){}
+  }, 800);
+}
+
+/* =========================================================
+   MODELO
+   ========================================================= */
+function allArquivos(){
+  const set = new Set();
+  db.historias.forEach(H=>{
+    H.capitulos.forEach(c=>set.add(c.arquivo));
+    H.partes.forEach(P=>P.capitulos.forEach(c=>set.add(c.arquivo)));
+  });
+  return set;
+}
+
+function uniq(base, used){
+  let id = base || "item", n = 2;
+  while(used.has(id)) id = (base||"item") + "-" + (n++);
+  return id;
+}
+
+function chaps(h,p){ return p >= 0 ? db.historias[h].partes[p].capitulos : db.historias[h].capitulos; }
+
+function normCap(c, usedFiles, base){
+  const id = String(c.id != null ? c.id : "") || slug(c.titulo) || "cap";
+  let arq = c.arquivo || (base + "/" + id + ".txt");
+  arq = uniq(arq, usedFiles); usedFiles.add(arq);
+  return {
+    id, titulo: c.titulo || id,
+    numero: (c.numero === undefined || c.numero === null || c.numero === "") ? null : Number(c.numero),
+    capa: c.capa || "", arquivo: arq,
+    texto: typeof c.texto === "string" ? c.texto.replace(/\r\n?/g,"\n") : ""
+  };
+}
+
+function loadData(data){
+  if(!data || !Array.isArray(data.historias)) throw new Error('O arquivo precisa ter a propriedade "historias".');
+  const used = new Set();
+  let semTexto = 0;
+  const num = v => Number.isFinite(Number(v)) ? Number(v) : 1;
+  const mapCaps = (arr, base) => (Array.isArray(arr)?arr:[]).map(c=>{
+    const n = normCap(c, used, base);
+    if(!n.texto) semTexto++;
+    return n;
+  });
+  db = {historias: data.historias.map(H=>{
+    const hid = String(H.id || slug(H.titulo) || "historia");
+    return {
+      id: hid, titulo: H.titulo || hid, capa: H.capa || "", inicio: num(H.inicio),
+      partes: (Array.isArray(H.partes)?H.partes:[]).map(P=>({
+        id: String(P.id || slug(P.titulo) || "parte"), titulo: P.titulo || P.id || "Parte",
+        capa: P.capa || "", inicio: num(P.inicio),
+        capitulos: mapCaps(P.capitulos, hid)
+      })),
+      capitulos: (Array.isArray(H.partes) && H.partes.length) ? [] : mapCaps(H.capitulos, hid)
+    };
+  })};
+  pers = Object.entries(data.personagens && typeof data.personagens==="object" ? data.personagens : {})
+    .map(([n,v])=>Object.assign({_n:n}, v));
+  sel = {h:-1,p:-1,c:-1};
+  return semTexto;
+}
+
+function cleanCap(c){
+  const o = {id:c.id, titulo:c.titulo};
+  if(c.numero !== null && Number.isFinite(c.numero)) o.numero = c.numero;
+  if(c.capa) o.capa = c.capa;
+  o.arquivo = c.arquivo; o.texto = c.texto;
+  return o;
+}
+
+function serialize(){
+  const personagens = {};
+  pers.forEach(p=>{
+    if(!p._n) return;
+    const {_n, ...rest} = p;
+    Object.keys(rest).forEach(k=>{ if(rest[k]==="" ) delete rest[k]; });
+    personagens[_n] = rest;
+  });
+  return {
+    versao: 1, personagens,
+    historias: db.historias.map(H=>{
+      const o = {id:H.id, titulo:H.titulo, capa:H.capa};
+      if(H.partes.length){
+        o.partes = H.partes.map(P=>({id:P.id,titulo:P.titulo,capa:P.capa,inicio:P.inicio,capitulos:P.capitulos.map(cleanCap)}));
+      }else{
+        o.inicio = H.inicio; o.capitulos = H.capitulos.map(cleanCap);
+      }
+      return o;
+    })
+  };
+}
+
+/* =========================================================
+   ABRIR / SALVAR
+   ========================================================= */
+async function abrirArquivo(f){
+  try{
+    const txt = (await f.text()).replace(/^\uFEFF/,"");
+    const semTexto = loadData(JSON.parse(txt));
+    fileName = f.name; setDirty(false); renderAll();
+    if(semTexto) aviso(semTexto + " capítulo(s) sem texto. Se este é o historias.json antigo, importe os .txt em cada capítulo.");
+    return true;
+  }catch(err){ aviso("Não consegui abrir: " + err.message); return false; }
+}
+
+$("btnAbrir").onclick = async ()=>{
+  /* Computador (Chrome/Edge): seletor que lembra o local para salvar de volta */
+  if(window.showOpenFilePicker && !isMobile){
+    try{
+      const [h] = await window.showOpenFilePicker({
+        types:[{description:"Banco de histórias", accept:{"text/plain":[".db",".json"]}}]
+      });
+      if(await abrirArquivo(await h.getFile())) fileHandle = h;
+      return;
+    }catch(e){ if(e && e.name==="AbortError") return; }
+  }
+  /* Celular/WebView: clique direto e síncrono no input de arquivo */
+  $("fileDb").value=""; $("fileDb").click();
+};
+$("fileDb").onchange = async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  fileHandle = null;
+  await abrirArquivo(f);
+};
+
+$("btnNovo").onclick = async ()=>{
+  if(dirty && !(await confirmar("Há alterações não salvas. Começar um arquivo novo mesmo assim?"))) return;
+  db = {historias:[]}; pers = []; sel = {h:-1,p:-1,c:-1}; fileName = ""; fileHandle = null;
+  setDirty(false); renderAll();
+};
+
+function concluirSalvar(nome){
+  fileName = nome || "historias.db"; setDirty(false);
+  try{ localStorage.removeItem(DRAFT); }catch(e){}
+}
+
+/*
+  Onde salvar:
+  1) Computador (Chrome/Edge): janela "Salvar como" para escolher a pasta e o nome.
+  2) Celular: folha de compartilhamento do Android (escolha "Salvar em arquivos"/Drive/etc.).
+  3) Qualquer outro navegador: download comum (vai para Downloads).
+*/
+async function gravar(escolher){
+  const conteudo = JSON.stringify(serialize(), null, 2);
+
+  /* 1) Computador: janela "Salvar como" */
+  if(window.showSaveFilePicker && !isMobile){
+    try{
+      let h = fileHandle;
+      if(escolher || !h){
+        h = await window.showSaveFilePicker({
+          suggestedName: (fileName && /\.db$/i.test(fileName)) ? fileName : "historias.db",
+          types:[{description:"Banco de histórias", accept:{"text/plain":[".db"]}}]
+        });
+      }
+      const w = await h.createWritable();
+      await w.write(conteudo); await w.close();
+      fileHandle = h; concluirSalvar(h.name); return;
+    }catch(e){
+      if(e && e.name==="AbortError") return;
+      console.warn("Gravação direta falhou, usando alternativa:", e);
+    }
+  }
+
+  /* 2) WebView: não dá para confirmar se o download funcionou, então mostra o painel de texto
+        (copiar / baixar) em vez de falhar em silêncio */
+  if(isWebView){
+    await painelTexto("Salvar", "Toque em “Baixar arquivo”. Se nada aparecer na pasta de downloads, toque em “Copiar” e cole em um arquivo .db.");
+    return;
+  }
+
+  /* 3) Celular (Chrome): folha de compartilhamento */
+  if(isMobile && navigator.canShare && navigator.share){
+    try{
+      const arq = new File([conteudo], "historias.db", {type:"text/plain"});
+      if(navigator.canShare({files:[arq]})){
+        await navigator.share({files:[arq], title:"historias.db"});
+        concluirSalvar("historias.db"); return;
+      }
+    }catch(e){
+      if(e && e.name==="AbortError") return;
+      console.warn("Compartilhar falhou, usando download:", e);
+    }
+  }
+
+  /* 4) Download comum */
+  baixar(conteudo);
+  concluirSalvar("historias.db");
+}
+
+$("btnSalvar").onclick = ()=>gravar(false);
+$("btnSalvarComo").onclick = ()=>gravar(true);
+
+window.addEventListener("beforeunload", e=>{ if(dirty){ e.preventDefault(); e.returnValue = ""; } });
+
+/* =========================================================
+   IMPORTAR .txt / .docx
+   ========================================================= */
+async function lerArquivo(f){
+  const low = f.name.toLowerCase();
+  if(low.endsWith(".docx")) return docxToText(await f.arrayBuffer());
+  if(low.endsWith(".doc")) throw new Error(".doc antigo não é suportado. Salve como .docx ou .txt.");
+  return (await f.text()).replace(/^\uFEFF/,"").replace(/\r\n?/g,"\n");
+}
+
+$("fileImp").onchange = async e=>{
+  const files = Array.from(e.target.files); e.target.value = "";
+  if(!files.length || !importTarget) return;
+  for(const f of files){
+    try{
+      const texto = await lerArquivo(f);
+      const nome = f.name.replace(/\.[^.]+$/,"");
+      if(importTarget.type === "replace"){
+        const c = chaps(sel.h, sel.p)[sel.c];
+        c.texto = texto;
+      }else{
+        const {h,p} = importTarget;
+        const hd = parseHeader(texto);
+        addCap(h, p, hd.subtitulo || nome, texto, false);
+      }
+      setDirty(true);
+    }catch(err){ aviso(f.name + ": " + err.message); }
+  }
+  renderAll();
+};
+
+/* =========================================================
+   AÇÕES
+   ========================================================= */
+function addCap(h,p,titulo,texto,abrir){
+  const H = db.historias[h];
+  const id = uniq(slug(titulo)||"cap", new Set(chaps(h,p).map(c=>c.id)));
+  const arq = uniq(H.id + "/" + id + ".txt", allArquivos());
+  chaps(h,p).push({id, titulo, numero:null, capa:"", arquivo:arq, texto: texto||""});
+  if(abrir){ sel = {h,p,c:chaps(h,p).length-1}; }
+}
+
+function move(arr,i,d){
+  const j = i + d; if(j<0 || j>=arr.length) return false;
+  [arr[i],arr[j]] = [arr[j],arr[i]]; return true;
+}
+
+const actions = {
+  tab:(h,p,c,b)=>showTab(b.dataset.tab),
+  addH:()=>{
+    const id = uniq("historia", new Set(db.historias.map(x=>x.id)));
+    db.historias.push({id,titulo:"Nova história",capa:"",inicio:1,partes:[],capitulos:[]});
+    changed();
+  },
+  addP:async (h)=>{
+    const H = db.historias[h];
+    const id = uniq(slug("parte"), new Set(H.partes.map(x=>x.id)));
+    const P = {id,titulo:"Nova parte",capa:"",inicio:1,capitulos:[]};
+    if(!H.partes.length && H.capitulos.length && await confirmar("Os capítulos atuais serão movidos para a nova parte. Continuar?")){
+      P.capitulos = H.capitulos; H.capitulos = [];
+    }
+    H.partes.push(P); changed();
+  },
+  addC:(h,p)=>{ addCap(h,p,"Novo capítulo","",true); changed(); showTab("capitulo"); },
+  delH:async (h)=>{ if(await confirmar("Apagar esta história inteira?")){ db.historias.splice(h,1); sel={h:-1,p:-1,c:-1}; changed(); } },
+  delP:async (h,p)=>{ if(await confirmar("Apagar esta parte e seus capítulos?")){ db.historias[h].partes.splice(p,1); sel={h:-1,p:-1,c:-1}; changed(); } },
+  delC:async (h,p,c)=>{ if(await confirmar("Apagar este capítulo?")){ chaps(h,p).splice(c,1); sel={h:-1,p:-1,c:-1}; changed(); } },
+  upH:(h)=>{ move(db.historias,h,-1) && changed(); }, dnH:(h)=>{ move(db.historias,h,1) && changed(); },
+  upP:(h,p)=>{ move(db.historias[h].partes,p,-1) && changed(); }, dnP:(h,p)=>{ move(db.historias[h].partes,p,1) && changed(); },
+  upC:(h,p,c)=>{ move(chaps(h,p),c,-1) && changed(); }, dnC:(h,p,c)=>{ move(chaps(h,p),c,1) && changed(); },
+  openC:(h,p,c)=>{ sel={h,p,c}; renderChap(); showTab("capitulo"); },
+  impNew:(h,p)=>{ importTarget={type:"new",h,p}; $("fileImp").click(); },
+  impRep:()=>{ importTarget={type:"replace"}; $("fileImp").click(); },
+  tag:(h,p,c,b)=>insertTag(b.dataset.tag),
+  addPers:()=>{ pers.push({_n:"",imagem:"",transicao:""}); setDirty(true); renderPers(); },
+  delPers:(h)=>{ pers.splice(h,1); setDirty(true); renderPers(); }
+};
+
+function changed(){ setDirty(true); renderAll(); }
+
+document.addEventListener("click", e=>{
+  const b = e.target.closest("[data-a]"); if(!b) return;
+  const g = k => b.dataset[k] === undefined ? -1 : Number(b.dataset[k]);
+  const fn = actions[b.dataset.a]; if(fn) fn(g("h"),g("p"),g("c"),b);
+});
+
+function showTab(name){
+  ["estrutura","capitulo","personagens"].forEach(t=>{
+    $("tab-"+t).classList.toggle("hide", t!==name);
+  });
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on", b.dataset.tab===name));
+  if(name==="capitulo") renderChap();
+  window.scrollTo(0,0);
+}
+
+/* =========================================================
+   ESTRUTURA
+   ========================================================= */
+function capRows(h,p){
+  return chaps(h,p).map((c,i)=>
+    `<div class="chap">
+      <button class="t" data-a="openC" data-h="${h}" data-p="${p}" data-c="${i}">${esc(c.titulo)||"(sem título)"}</button>
+      <button class="sm" data-a="upC" data-h="${h}" data-p="${p}" data-c="${i}">↑</button>
+      <button class="sm" data-a="dnC" data-h="${h}" data-p="${p}" data-c="${i}">↓</button>
+      <button class="sm dg" data-a="delC" data-h="${h}" data-p="${p}" data-c="${i}">✕</button>
+    </div>`).join("");
+}
+
+function renderTree(){
+  if(!db.historias.length){ $("tree").innerHTML = '<p class="mut">Nenhuma história. Toque em “+ Nova história” ou abra um .db.</p>'; return; }
+  $("tree").innerHTML = db.historias.map((H,h)=>{
+    const partes = H.partes.map((P,p)=>`
+      <div class="card">
+        <div class="row">
+          <input class="grow" data-t="P" data-k="titulo" data-h="${h}" data-p="${p}" value="${esc(P.titulo)}" placeholder="Nome da parte">
+          <button class="sm" data-a="upP" data-h="${h}" data-p="${p}">↑</button>
+          <button class="sm" data-a="dnP" data-h="${h}" data-p="${p}">↓</button>
+          <button class="sm dg" data-a="delP" data-h="${h}" data-p="${p}">✕</button>
+        </div>
+        <div class="row">
+          <input class="grow" data-t="P" data-k="capa" data-h="${h}" data-p="${p}" value="${esc(P.capa)}" placeholder="Capa (arquivo)">
+          <input class="num" type="number" data-t="P" data-k="inicio" data-h="${h}" data-p="${p}" value="${esc(P.inicio)}" title="Número do primeiro capítulo">
+        </div>
+        ${capRows(h,p)}
+        <div class="row">
+          <button class="sm" data-a="addC" data-h="${h}" data-p="${p}">+ Capítulo</button>
+          <button class="sm" data-a="impNew" data-h="${h}" data-p="${p}">Importar .txt/.docx</button>
+        </div>
+      </div>`).join("");
+    const direto = H.partes.length ? "" : `
+        <div class="row"><span class="mut">Início da numeração:</span>
+          <input class="num" type="number" data-t="H" data-k="inicio" data-h="${h}" value="${esc(H.inicio)}"></div>
+        ${capRows(h,-1)}
+        <div class="row">
+          <button class="sm" data-a="addC" data-h="${h}">+ Capítulo</button>
+          <button class="sm" data-a="impNew" data-h="${h}">Importar .txt/.docx</button>
+        </div>`;
+    return `<div class="card">
+      <div class="row">
+        <input class="grow" data-t="H" data-k="titulo" data-h="${h}" value="${esc(H.titulo)}" placeholder="Título da história">
+        <button class="sm" data-a="upH" data-h="${h}">↑</button>
+        <button class="sm" data-a="dnH" data-h="${h}">↓</button>
+        <button class="sm dg" data-a="delH" data-h="${h}">✕</button>
+      </div>
+      <div class="row"><input class="grow" data-t="H" data-k="capa" data-h="${h}" value="${esc(H.capa)}" placeholder="Capa (arquivo)"></div>
+      ${partes}${direto}
+      <div class="row"><button class="sm" data-a="addP" data-h="${h}">+ Parte</button></div>
+    </div>`;
+  }).join("");
+}
+
+$("tree").addEventListener("input", e=>{
+  const t = e.target.dataset; if(!t.t) return;
+  const obj = t.t==="H" ? db.historias[+t.h] : db.historias[+t.h].partes[+t.p];
+  let v = e.target.value;
+  if(t.k==="inicio") v = Number.isFinite(Number(v)) && v!=="" ? Number(v) : 1;
+  obj[t.k] = v; setDirty(true);
+});
+
+/* =========================================================
+   CAPÍTULO
+   ========================================================= */
+function curCap(){
+  if(sel.h<0 || sel.c<0) return null;
+  const arr = (db.historias[sel.h] && (sel.p>=0 ? (db.historias[sel.h].partes[sel.p]||{}).capitulos : db.historias[sel.h].capitulos));
+  return arr ? arr[sel.c] || null : null;
+}
+
+function renderChap(){
+  const c = curCap();
+  if(!c){ $("chapBox").innerHTML = '<p class="mut">Escolha um capítulo na aba Estrutura.</p>'; return; }
+  const H = db.historias[sel.h], P = sel.p>=0 ? H.partes[sel.p] : null;
+  const hd = parseHeader(c.texto);
+  const nomes = pers.map(p=>`<option value="${esc(p._n)}">`).join("");
+  $("chapBox").innerHTML = `
+    <p class="mut">${esc(H.titulo)}${P?" › "+esc(P.titulo):""}</p>
+    <label>Título do capítulo (no menu)</label>
+    <input id="cTitulo" value="${esc(c.titulo)}">
+    <div class="row">
+      <div class="grow"><label>Número (vazio = automático, -1 = sem número)</label><input id="cNumero" value="${c.numero===null?"":esc(c.numero)}"></div>
+      <div class="grow"><label>Capa do capítulo (arquivo)</label><input id="cCapa" value="${esc(c.capa)}"></div>
+    </div>
+    <label>Personagem <span class="mut">[personagem=]</span></label>
+    <input id="hPers" list="persList" value="${esc(hd.personagem)}"><datalist id="persList">${nomes}</datalist>
+    <div class="row">
+      <div class="grow"><label>Título da página <span class="mut">[titulo=]</span></label><input id="hTitulo" value="${esc(hd.titulo)}"></div>
+      <div class="grow"><label>Subtítulo <span class="mut">[subtitulo=]</span></label><input id="hSub" value="${esc(hd.subtitulo)}"></div>
+    </div>
+    <div class="tags">
+      <button class="sm" data-a="tag" data-tag="imagem">+ imagem</button>
+      <button class="sm" data-a="tag" data-tag="audio">+ áudio</button>
+      <button class="sm" data-a="tag" data-tag="personagem">+ trocar personagem</button>
+      <button class="sm" data-a="impRep">Importar (substitui o texto)</button>
+    </div>
+    <textarea id="corpo" placeholder="Escreva ou cole o texto. Parágrafos são separados por linha em branco.">${esc(hd.corpo)}</textarea>
+    <p class="mut" id="contagem"></p>
+    <div class="tags2">
+        <button class="sm" data-a="tag" data-tag="comentario">+ comentário</button>
+        <button class="sm" data-a="tag" data-tag="titulo">+ adicionar título</button>
+        <button class="sm" data-a="tag" data-tag="subtitulo">+ adicionar subtítulo</button>
+    </div>`;
+  contar();
+}
+
+function contar(){
+  const el = $("corpo"); if(!el || !$("contagem")) return;
+  $("contagem").textContent = (el.value.split(/\s+/).filter(Boolean).length) + " palavras";
+}
+
+function syncTexto(){
+  const c = curCap(); if(!c) return;
+  c.texto = buildText({
+    personagem:$("hPers").value.trim(), titulo:$("hTitulo").value.trim(),
+    subtitulo:$("hSub").value.trim(), corpo:$("corpo").value.replace(/\r\n?/g,"\n")
+  });
+  contar(); setDirty(true);
+}
+
+$("chapBox").addEventListener("input", e=>{
+  const c = curCap(); if(!c) return;
+  const id = e.target.id;
+  if(id==="cTitulo"){ c.titulo = e.target.value; setDirty(true); }
+  else if(id==="cCapa"){ c.capa = e.target.value.trim(); setDirty(true); }
+  else if(id==="cNumero"){
+    const v = e.target.value.trim();
+    c.numero = (v==="" || !Number.isFinite(Number(v))) ? null : Number(v); setDirty(true);
+  }
+  else if(["hPers","hTitulo","hSub","corpo"].includes(id)) syncTexto();
+});
+
+async function insertTag(tag){
+  const ta = $("corpo"); if(!ta) return;
+  const pos = ta.selectionStart || 0;
+  const v = await pedir(tag==="audio" ? "Arquivo de áudio (ou 'stop' para parar):" : "Valor de ["+tag+"=...]:");
+  if(v===null || !v.trim()) return;
+  const antes = ta.value.slice(0,pos), depois = ta.value.slice(pos);
+  const pre = antes && !antes.endsWith("\n\n") ? (antes.endsWith("\n") ? "\n" : "\n\n") : "";
+  const bloco = pre + "["+tag+"="+v.trim()+"]\n\n";
+  ta.value = antes + bloco + depois;
+  ta.focus(); ta.selectionStart = ta.selectionEnd = (antes+bloco).length;
+  syncTexto();
+}
+
+/* =========================================================
+   PERSONAGENS
+   ========================================================= */
+function renderPers(){
+  $("persBox").innerHTML = pers.length ? pers.map((p,i)=>`
+    <div class="card">
+      <div class="row">
+        <input class="grow" data-pi="${i}" data-k="_n" value="${esc(p._n)}" placeholder="Nome (igual ao [personagem=])">
+        <button class="sm dg" data-a="delPers" data-h="${i}">✕</button>
+      </div>
+      <div class="row">
+        <input class="grow" data-pi="${i}" data-k="imagem" value="${esc(p.imagem||"")}" placeholder="Imagem padrão (arquivo)">
+        <input class="grow" data-pi="${i}" data-k="transicao" value="${esc(p.transicao||"")}" placeholder="Transição (ex.: blur)">
+      </div>
+    </div>`).join("") : '<p class="mut">Nenhum personagem.</p>';
+}
+
+$("persBox").addEventListener("input", e=>{
+  const d = e.target.dataset; if(d.pi===undefined) return;
+  pers[+d.pi][d.k] = e.target.value; setDirty(true);
+});
+
+/* =========================================================
+   INÍCIO
+   ========================================================= */
+function renderAll(){ renderTree(); renderChap(); renderPers(); }
+
+(async function init(){
+  renderAll();
+  try{
+    const raw = localStorage.getItem(DRAFT);
+    if(raw && await confirmar("Há um rascunho salvo neste aparelho. Restaurar?")){
+      loadData(JSON.parse(raw)); fileName = "rascunho"; renderAll(); setDirty(true);
+    }
+  }catch(e){}
+})();
+
+$("btnTexto").onclick = ()=>painelTexto();
+
+/* Erros inesperados aparecem na tela (WebView não mostra o console) */
+window.addEventListener("error", e=>{ try{ aviso("Erro: " + e.message); }catch(_){} });
+window.addEventListener("unhandledrejection", e=>{ try{ aviso("Erro: " + ((e.reason && e.reason.message) || e.reason)); }catch(_){} });
+</script>
+</body>
+</html>
